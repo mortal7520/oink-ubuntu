@@ -69,7 +69,7 @@ OinkPulse *oink_pa_stream(const char*device,int record,uint32_t rate,uint32_t fr
  pa_sample_spec spec={PA_SAMPLE_FLOAT32NE,rate,2};p->stream=pa_stream_new(p->context,record?"Oink output monitor":"Oink received audio",&spec,NULL);if(!p->stream)goto fail;
  pa_buffer_attr attr;memset(&attr,255,sizeof(attr));attr.maxlength=rate*2*sizeof(float)/10;
  if(record){attr.fragsize=(frames?frames:240)*2*sizeof(float);pa_stream_set_read_callback(p->stream,capture_read,p);pa_stream_set_overflow_callback(p->stream,overflow,p);}
- else{attr.tlength=(frames?frames:240)*2*sizeof(float)*2;attr.minreq=(frames?frames:240)*2*sizeof(float);attr.prebuf=0;pa_stream_set_write_callback(p->stream,playback_write,p);}
+ else{attr.tlength=(frames?frames:240)*2*sizeof(float)*2;attr.minreq=(frames?frames:240)*2*sizeof(float);/* Retain automatic prebuffering: prebuf=0 lets read outrun write after underrun. */pa_stream_set_write_callback(p->stream,playback_write,p);}
  pa_stream_flags_t flags=PA_STREAM_AUTO_TIMING_UPDATE|PA_STREAM_INTERPOLATE_TIMING|PA_STREAM_ADJUST_LATENCY|PA_STREAM_DONT_MOVE;
  int rc=record?pa_stream_connect_record(p->stream,record==2?selected->name:selected->monitor,&attr,flags):pa_stream_connect_playback(p->stream,selected->name,&attr,flags,NULL,NULL);
  if(rc<0)goto fail;
@@ -79,6 +79,13 @@ OinkPulse *oink_pa_stream(const char*device,int record,uint32_t rate,uint32_t fr
  fail:if(error&&size)snprintf(error,size,"PulseAudio stream: %s",pa_strerror(pa_context_errno(p->context)));oink_pa_close(p);return NULL;
 }
 int oink_pa_iterate(OinkPulse*p){if(step(p)<0||p->failed||(p->stream&&!PA_STREAM_IS_GOOD(pa_stream_get_state(p->stream))))return -1;return p->default_changed?2:(p->changed?1:0);}
+/* A playback writer must flush ready/deferred I/O before sleeping again.
+ * A bounded native poll also keeps stop/join responsive without busy waiting. */
+int oink_pa_playback_iterate(OinkPulse*p){
+ if(pa_mainloop_prepare(p->loop,1000)<0||pa_mainloop_poll(p->loop)<0||pa_mainloop_dispatch(p->loop)<0)return -1;
+ if(p->failed||!PA_CONTEXT_IS_GOOD(pa_context_get_state(p->context))||(p->stream&&!PA_STREAM_IS_GOOD(pa_stream_get_state(p->stream))))return -1;
+ return 0;
+}
 uint32_t oink_pa_buffer(OinkPulse*p){const pa_buffer_attr*a=pa_stream_get_buffer_attr(p->stream);if(!a)return 0;uint32_t bytes=p->record?a->fragsize:a->minreq;return bytes==(uint32_t)-1?0:bytes/(sizeof(float)*2);}
 const char*oink_pa_selected(OinkPulse*p){return p->selected;}
 static int set_control(const char*name,int mute,uint32_t volume,int set_volume,char*error,size_t size){OinkPulse*p=open_context(error,size);if(!p)return -1;int ok=0;pa_operation*op;if(set_volume){OinkDevice d;p->devices=&d;p->capacity=1;if(wait_operation(p,pa_context_get_sink_info_by_name(p->context,name,sink_info,p))<0||p->count!=1){oink_pa_close(p);return -1;}pa_cvolume v;pa_cvolume_set(&v,(uint8_t)d.channels,volume);op=pa_context_set_sink_volume_by_name(p->context,name,&v,success,&ok);}else op=pa_context_set_sink_mute_by_name(p->context,name,mute,success,&ok);int rc=wait_operation(p,op);if((rc<0||!ok)&&error&&size)snprintf(error,size,"PulseAudio endpoint control: %s",pa_strerror(pa_context_errno(p->context)));oink_pa_close(p);return rc<0||!ok?-1:0;}

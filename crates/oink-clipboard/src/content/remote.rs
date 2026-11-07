@@ -79,6 +79,48 @@ impl Translator for NoTranslation {
         Err(unavailable(Unavailable::Unsupported))
     }
 }
+
+// Existing peers do not render Unknown targets. Linux still consumes only its
+// declared MIME contracts; this selector requests that same portable encoding
+// through a known foreign renderer without claiming a native namespace.
+#[cfg(target_os = "linux")]
+fn portable_request_target(
+    inventory: &Inventory,
+    id: RepresentationId,
+    target: ClipPlatform,
+) -> io::Result<ClipPlatform> {
+    if target != ClipPlatform::Unknown {
+        return Ok(target);
+    }
+    let representation = inventory
+        .wanted(target)
+        .find(|rep| rep.id == id)
+        .ok_or_else(|| unavailable(Unavailable::Unsupported))?;
+    // A standard tag on an open-wire future native identity is not enough
+    // to authorize passing that opaque payload through a legacy decoder.
+    if inventory.platform != ClipPlatform::Unknown && representation.format.platform() != inventory.platform {
+        return Err(unavailable(Unavailable::Unsupported));
+    }
+    use crate::model::StandardFormat;
+    if !matches!(
+        representation.standard,
+        Some(
+            StandardFormat::Text
+                | StandardFormat::Html
+                | StandardFormat::Rtf
+                | StandardFormat::Png
+                | StandardFormat::Url
+        )
+    ) {
+        return Err(unavailable(Unavailable::Unsupported));
+    }
+    Ok(match inventory.platform {
+        ClipPlatform::Windows => ClipPlatform::Mac,
+        ClipPlatform::Mac => ClipPlatform::Windows,
+        ClipPlatform::Unknown => ClipPlatform::Unknown,
+    })
+}
+
 impl Remote {
     /// Read-only, nonblocking failure diagnostics. Do not acquire the progress
     /// watch's read lock: a stuck writer is one reason a watchdog may be firing.
@@ -442,16 +484,16 @@ impl Remote {
         let offer = self.0.inventory.id;
         // The link owner admits every bulk operation against explicit wire
         // budgets. Include bounded frame metadata in addition to payload bytes.
-        let (item, accepted_format) = self
-            .0
-            .link
-            .select_representation(&self.0.inventory, id, self.0.target)?;
+        let target = self.0.target;
+        #[cfg(target_os = "linux")]
+        let target = portable_request_target(&self.0.inventory, id, target)?;
+        let (item, accepted_format) = self.0.link.select_representation(&self.0.inventory, id, target)?;
         let request = ContentMsg::ReadRepresentation {
             offer,
             representation: id,
             item,
             accepted_format,
-            target: self.0.target,
+            target,
             demand,
         };
         let send_max = oink_protocol::v1::frame::encode(
@@ -825,3 +867,7 @@ mod cancellation_tests {
         reader.join().unwrap();
     }
 }
+
+#[cfg(all(test, debug_assertions, target_os = "linux"))]
+#[path = "remote/linux_compat_tests.rs"]
+mod linux_compat_tests;

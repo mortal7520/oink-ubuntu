@@ -65,6 +65,7 @@ unsafe extern "C" {
     ) -> *mut c_void;
     fn oink_pa_close(stream: *mut c_void);
     pub(crate) fn oink_pa_iterate(stream: *mut c_void) -> c_int;
+    fn oink_pa_playback_iterate(stream: *mut c_void) -> c_int;
     fn oink_pa_buffer(stream: *mut c_void) -> u32;
     fn oink_pa_watch_output(stream: *mut c_void, name: *const c_char) -> c_int;
     fn oink_pa_mute(name: *const c_char, mute: c_int, error: *mut c_char, size: usize) -> c_int;
@@ -511,11 +512,10 @@ impl NativePlayback {
                 cb.buffer_frames = unsafe { oink_pa_buffer(native.0) };
                 let _ = tx.send(Ok(cb.buffer_frames));
                 while !s.load(Ordering::Acquire) {
-                    if unsafe { oink_pa_iterate(native.0) } < 0 || cb.panicked {
+                    if unsafe { oink_pa_playback_iterate(native.0) } < 0 || cb.panicked {
                         on_error("PulseAudio playback disconnected or failed".into());
                         break;
                     }
-                    thread::sleep(Duration::from_millis(1));
                 }
             })
             .map_err(|e| e.to_string())?;
@@ -665,6 +665,133 @@ mod tests {
             if let Some(w) = self.writer.take() {
                 let _ = w.join();
             }
+        }
+    }
+    #[test]
+    #[ignore = "requires isolated PulseAudio with oink_test_output and OINK_TEST_PULSE=1"]
+    fn native_full_sink_starts_empty_and_resumes_without_silent_or_sparse_output() {
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+        assert_eq!(std::env::var("OINK_TEST_PULSE").as_deref(), Ok("1"));
+        assert!(std::env::var("PULSE_SERVER").is_ok_and(|s| s.starts_with("unix:")));
+        assert_eq!(
+            text(&device(Some("pulse:oink_test_output")).unwrap().name),
+            "oink_test_output"
+        );
+        struct Monitor {
+            child: std::process::Child,
+            worker: Option<JoinHandle<Vec<(f64, f64)>>>,
+        }
+        impl Monitor {
+            fn stop(&mut self) -> Vec<(f64, f64)> {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                self.worker.take().map(|w| w.join().unwrap()).unwrap_or_default()
+            }
+        }
+        impl Drop for Monitor {
+            fn drop(&mut self) {
+                self.stop();
+            }
+        }
+        let origin = Instant::now();
+        let mut child = Command::new("parec")
+            .args([
+                "--device=oink_test_output.monitor",
+                "--format=float32le",
+                "--rate=48000",
+                "--channels=2",
+                "--latency-msec=20",
+                "--process-time-msec=5",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut pipe = child.stdout.take().unwrap();
+        let worker = thread::spawn(move || {
+            let mut windows = Vec::new();
+            let mut bytes = [0u8; 4800 * 8];
+            while pipe.read_exact(&mut bytes).is_ok() {
+                let energy: f64 = bytes
+                    .chunks_exact(8)
+                    .map(|frame| f64::from(f32::from_le_bytes(frame[..4].try_into().unwrap())).powi(2))
+                    .sum();
+                windows.push((origin.elapsed().as_secs_f64(), (energy / 4800.0).sqrt()));
+            }
+            windows
+        });
+        let mut monitor = Monitor {
+            child,
+            worker: Some(worker),
+        };
+        thread::sleep(Duration::from_millis(100));
+        let mut output = crate::sink::Sink::start("pulse:oink_test_output").unwrap();
+        // The native writer begins without a source. A zero prebuffer used to
+        // leave subsequent relative writes permanently behind the read index.
+        thread::sleep(Duration::from_millis(150));
+        // A newly started isolated null sink can take an initial timer cycle to
+        // run. Wait for real native demand before the bounded packet producer.
+        let ready = Instant::now();
+        let mut callbacks = 0;
+        while callbacks < 3 && ready.elapsed() < Duration::from_secs(2) {
+            callbacks += output.take_metrics().callbacks;
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(callbacks >= 3, "native playback did not start");
+        let config = crate::dsp::Config::music_opus();
+        let mut ranges = Vec::new();
+        for burst in 0..2 {
+            let mut source = output.source(config).unwrap();
+            let mut encoder = crate::dsp::Encoder::new_with_config(config).unwrap();
+            let start = Instant::now();
+            for sequence in 0..60u64 {
+                let pcm: Vec<f32> = (0..config.frame_size())
+                    .flat_map(|frame| {
+                        let sample =
+                            ((sequence as usize * config.frame_size() + frame) as f64 * std::f64::consts::TAU * 997.0
+                                / 48000.0)
+                                .sin() as f32
+                                * 0.05;
+                        [sample, sample]
+                    })
+                    .collect();
+                let payload = encoder.encode(&pcm).unwrap();
+                assert!(
+                    source.push(sequence, &payload, Instant::now(), Some(sequence * 20_000_000), None),
+                    "packet {sequence} burst {burst}: stats={:?} metrics={:?} error={:?}",
+                    source.stats(),
+                    output.take_metrics(),
+                    output.error()
+                );
+                source.poll();
+                let deadline = start + Duration::from_millis((sequence + 1) * 20);
+                if let Some(left) = deadline.checked_duration_since(Instant::now()) {
+                    thread::sleep(left);
+                }
+            }
+            source.poll();
+            assert_eq!(source.stats().decode_errors, 0);
+            ranges.push((
+                start.duration_since(origin).as_secs_f64() + 0.3,
+                origin.elapsed().as_secs_f64() - 0.1,
+            ));
+            drop(source);
+            if burst == 0 {
+                thread::sleep(Duration::from_millis(250));
+            }
+        }
+        thread::sleep(Duration::from_millis(150));
+        assert!(output.error().is_none(), "{:?}", output.error());
+        drop(output);
+        let windows = monitor.stop();
+        for (start, end) in ranges {
+            let stable: Vec<_> = windows.iter().filter(|(at, _)| *at >= start && *at <= end).collect();
+            assert!(stable.len() >= 6, "insufficient monitor windows: {windows:?}");
+            assert!(
+                stable.iter().all(|(_, rms)| (0.025..0.045).contains(rms)),
+                "silent/sparse native playback: {windows:?}"
+            );
         }
     }
     #[test]

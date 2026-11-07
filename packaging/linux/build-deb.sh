@@ -28,7 +28,7 @@ cat > "$pkg/usr/bin/oink-ubuntu" <<'LAUNCHER'
 exec /usr/lib/oink-ubuntu/oink "$@"
 LAUNCHER
 chmod 755 "$pkg/usr/bin/oink-ubuntu"
-version="0.3.3+ubuntu1"
+version="0.3.3+ubuntu2"
 cat > "$pkg/DEBIAN/control" <<CONTROL
 Package: oink-ubuntu
 Version: $version

@@ -12,7 +12,7 @@
 sh packaging/linux/build-deb.sh
 ```
 
-构建产物为 `dist-linux/oink-ubuntu_0.3.3+ubuntu1_amd64.deb` 和同名 `.tar.gz` 便携包。安装包可用 `sudo apt install ./oink-ubuntu_0.3.3+ubuntu1_amd64.deb` 安装；便携包解压后，在 X11 桌面内运行 `./oink-ubuntu/launch-oink.sh`。便携包仍需要安装包 `Depends` 中的系统运行库。修改版包含独立 UI、后台和命令行程序，后台以桌面用户身份运行，不需要 root 键鼠服务，也不修改设备节点权限或系统默认音频设备。
+构建产物为 `dist-linux/oink-ubuntu_0.3.3+ubuntu2_amd64.deb` 和同名 `.tar.gz` 便携包。安装包可用 `sudo apt install ./oink-ubuntu_0.3.3+ubuntu2_amd64.deb` 安装；便携包解压后，在 X11 桌面内运行 `./oink-ubuntu/launch-oink.sh`。便携包仍需要安装包 `Depends` 中的系统运行库。修改版包含独立 UI、后台和命令行程序，后台以桌面用户身份运行，不需要 root 键鼠服务，也不修改设备节点权限或系统默认音频设备。
 
 ## 连接与使用
 
@@ -34,6 +34,8 @@ Linux 修改版的更新由本地安装包维护；上游只发布的 Windows/ma
 - RandR 调整保留模式、旋转和镜像并验证回滚；已有非单位变换或 panning 的 CRTC 明确拒绝改布局。
 - 音频的默认输出范围可用；全局范围遇到多个普通输出时明确返回不支持。隔离测试使用真实协议服务和合成音频，未以物理扬声器/麦克风作验收。
 - 文件身份在进程内按原始 inode 与创建时间追踪。进程重启后仅在已保存目录附近作有界、只读元数据恢复；无法确认原始对象时拒绝读取替代文件。文件系统必须提供创建时间。
-- Windows 0.3.3 与本机 Ubuntu 的实体双机配对和跨屏键鼠已通过实机验收；真实应用的文件/多格式剪贴板及物理音频仍需分别实测。Linux 专属目标映射需要源设备支持新增能力，旧官方客户端的基础键鼠共享不受影响，新增设置对旧 owner 明确禁用。
+- Windows 0.3.3 与本机 Ubuntu 的实体双机配对和跨屏键鼠已通过实机验收；文件、多格式剪贴板和系统音频的最新实机矩阵见 Release 附带的 `live-validation.json`；测试输出端点与可选麦克风范围会分别注明。Linux 专属目标映射需要源设备支持新增能力，旧官方客户端的基础键鼠共享不受影响，新增设置对旧 owner 明确禁用。
 
 公开派生仓库：[mortal7520/oink-ubuntu](https://github.com/mortal7520/oink-ubuntu)。预览版运行包、源码及精确锁定的第三方 Rust 源码材料随 [Releases](https://github.com/mortal7520/oink-ubuntu/releases) 提供。
+
+本版修复了与旧官方客户端之间标准剪贴板内容的读取兼容，以及 Linux 播放欠载后持续无声、固定轮询休眠导致供给稀疏的问题。双机实测细节见发行版附带的 `live-validation.json`。
