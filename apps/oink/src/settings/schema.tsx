@@ -145,8 +145,8 @@ export const SECTIONS: SectionMeta[] = [
         icon: <KeyboardIcon />,
         items: [
             {
-                id: 'keymap', label: (p) => (p === 'mac' ? tr('Windows 按键映射') : tr('macOS 按键映射')),
-                desc: (p) => (p === 'mac' ? tr('用这台 Mac 的键盘控制 Windows 设备时，修饰键怎么对应') : tr('用这台电脑的键盘控制 Mac 时，修饰键怎么对应')),
+                id: 'keymap', get label() { return tr('按键映射'); },
+                get desc() { return tr('使用本机键盘控制所选系统的设备时，修饰键怎么对应'); },
                 get keywords() { return tr('键盘 修饰键 快捷键 command option control ctrl alt win caps lock 大写 中英 输入法 映射'); },
             },
             { id: 'takeForegroundOnLeave', only: 'win', get label() { return tr('指针离开时接管前台'); }, get desc() { return tr('指针离开本机时，接管前台应用，避免本机运行读取物理按键的应用时，按键同时在两边生效。若部分应用在指针离开后行为异常，可关闭此开关。'); }, get keywords() { return tr('前台 窗口 游戏 捕获 点击 按键 全屏'); } },

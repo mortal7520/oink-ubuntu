@@ -446,14 +446,15 @@ fn caps_windows_local_inflight_mapping_survives_settings_edit_without_letter_ove
 
 #[test]
 fn caps_custom_remote_mapping_works_in_all_os_directions() {
-    for source_os in [Os::MacOS, Os::Windows] {
-        for target_os in [Os::MacOS, Os::Windows] {
+    for source_os in [Os::MacOS, Os::Windows, Os::Linux] {
+        for target_os in [Os::MacOS, Os::Windows, Os::Linux] {
             let (mut s, mut t) = pair();
             s.cfg.os = source_os;
             t.cfg.os = target_os;
             s.peers.get_mut(&PC).unwrap().os = target_os;
             let settings = s.input_transforms.get_mut(&ME).unwrap();
             settings.macos = settings.windows.clone();
+            settings.linux = settings.windows.clone();
             key(&mut s, KeyCode::CAPS_LOCK, true, 10);
             key(&mut s, KeyCode::CAPS_LOCK, false, 20);
             assert_eq!(

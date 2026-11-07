@@ -122,7 +122,15 @@ fn external_links_follow_but_replacing_an_ancestor_cannot_redirect_a_reader() {
     std::os::unix::fs::symlink(dir.path().join("outside"), dir.path().join("root/link")).unwrap();
     let tree = Local::new(vec![(NodeId(1), dir.path().join("root"))]).unwrap();
     let page = tree.list(NodeId(1), None).unwrap();
-    assert_eq!(page.entries.len(), if cfg!(target_os = "macos") { 2 } else { 1 });
+    // Unix follows an external selected link under its captured Followed
+    // identity guard. The actual security assertion is below: replacing the
+    // selected ancestor must invalidate both the open reader and new selects.
+    assert_eq!(page.entries.len(), 2);
+    assert!(
+        page.entries
+            .iter()
+            .any(|n| n.name == "link" && n.kind == NodeKind::Directory)
+    );
     let selected = tree
         .select(page.entries.iter().find(|n| n.name == "file").unwrap().id)
         .unwrap();

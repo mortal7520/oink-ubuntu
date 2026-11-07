@@ -586,7 +586,7 @@ impl Owner {
         volume: Arc<oink_foundation::snapshot::Snapshot<Option<Arc<dto::AudioSessionContext>>>>,
         native_services: bool,
     ) -> Self {
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         let (recovered, recovery_error) = if !native_services {
             (None, None)
         } else {
@@ -598,11 +598,11 @@ impl Owner {
                 }
             }
         };
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
         let (recovered, recovery_error): (Option<oink_audio::recovery::RecoveryReport>, Option<String>) = (None, None);
         let recovery_error = startup_recovery_error(&directory, recovery_error);
         let platform: Arc<dyn AudioPlatform> = Arc::new(SystemAudio {
-            #[cfg(any(windows, target_os = "macos"))]
+            #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
             recovery_dir: directory.clone(),
         });
         #[cfg(any(test, debug_assertions))]

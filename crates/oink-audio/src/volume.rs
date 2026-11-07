@@ -656,7 +656,12 @@ pub fn open(output: &str, wake: std::sync::Arc<dyn Fn() + Send + Sync>) -> Resul
     {
         windows::open(output, wake)
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = wake;
+        crate::linux::open_volume(output)
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = (output, wake);
         Err(Fault {

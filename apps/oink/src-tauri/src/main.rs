@@ -30,14 +30,14 @@ fn run() -> std::process::ExitCode {
     if let Some(code) = oink_autostart::handle_autostart_arg() {
         return code;
     }
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
     {
         oink_ui::run();
         std::process::ExitCode::SUCCESS
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
-        eprintln!("Oink 界面只支持 macOS 与 Windows");
+        eprintln!("This build supports macOS, Windows and Ubuntu X11");
         std::process::ExitCode::FAILURE
     }
 }

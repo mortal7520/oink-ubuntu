@@ -1,3 +1,4 @@
+import type { InputTargetOs } from '../api/types';
 import type { Platform } from '../window/DesktopWindow';
 import { DEFAULT_SHORTCUTS } from './Shortcuts';
 import type { ShortcutId, ShortcutPref } from './Shortcuts';
@@ -20,7 +21,12 @@ export const KEY_NAMES: Record<Platform, Record<string, {
     },
     win: { ctrl: { name: 'Ctrl' }, win: { name: 'Win' }, alt: { name: 'Alt' }, shift: { name: 'Shift' }, caps: { name: 'Caps Lock' } },
 };
-export function presetMap(platform: Platform, preset: Exclude<KeyPreset, 'custom'>, capsIme: boolean): KeyMap {
+export function presetMap(platform: Platform, preset: Exclude<KeyPreset, 'custom'>, capsIme: boolean, target: InputTargetOs = platform === 'mac' ? 'windows' : 'macos', source: InputTargetOs = platform === 'mac' ? 'macos' : 'windows'): KeyMap {
+    if (platform === 'mac' && target === 'macos') return { keys: { control: 'control', option: 'option', command: 'command', shift: 'shift', caps: 'caps' } };
+    if (platform === 'win' && target !== 'macos') {
+        const swap = preset === 'mac' && (source === 'linux' || target === 'linux');
+        return { keys: { ctrl: swap ? 'win' : 'ctrl', win: swap ? 'ctrl' : 'win', alt: 'alt', shift: 'shift', caps: 'caps' } };
+    }
     if (platform === 'mac') {
         return preset === 'mac'
             ? { keys: { control: 'win', option: 'alt', command: 'ctrl', shift: 'shift', caps: capsIme ? 'shift' : 'caps' }, capsLong: capsIme ? 'caps' : undefined }
@@ -107,6 +113,10 @@ export const DEFAULT_PREFS: Prefs = {
 };
 export type PrefsApi = {
     pending: boolean;
+    keySourceOs?: InputTargetOs;
+    keyTargetOs?: InputTargetOs;
+    linuxTransformSupported?: boolean;
+    setKeyTargetOs?: (target: InputTargetOs) => void;
     launchStatus: import('../api/types').LaunchAtLoginStatus | null;
     canEdit: (key:string) => boolean;
     presentation: import('./model').PresentationPreferences;

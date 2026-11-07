@@ -1,4 +1,4 @@
-# Full Rust inventory for the two product targets, including build/test dependencies.
+# Full Rust inventory for the three product targets, including build/test dependencies.
 accepted = [
     "GPL-3.0-only",
     "MIT", "MIT-0", "Apache-2.0", "Apache-2.0 WITH LLVM-exception",
@@ -6,7 +6,7 @@ accepted = [
     "Unicode-3.0", "Unicode-DFS-2016", "CC0-1.0", "Unlicense",
     "BSL-1.0", "CDLA-Permissive-2.0",
 ]
-targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
 ignore-build-dependencies = false
 ignore-dev-dependencies = false
 ignore-transitive-dependencies = false

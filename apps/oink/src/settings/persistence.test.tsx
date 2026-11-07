@@ -288,3 +288,79 @@ it.each(['smooth','quality','lossless'])('keeps explicit source encoding quality
   expect(result.current.prefs.audioEncodingQuality).toBe(quality);
   expect(mocks.audio).not.toHaveBeenCalled();
 });
+
+
+it('edits an explicit Linux target without changing Mac or Windows data, then reloads it',async()=>{
+  const keyboard={preset:'custom' as const,table:[{from:0x700e0,to:0x700e6}]};
+  let stored:InputTransform={macos:{reverse_wheel:false,keyboard},windows:{reverse_wheel:false,keyboard},overrides:[]};
+  mocks.state={...mocks.state,boot:{platform:'windows'},overview:{this_device:{id:'self'}}};
+  mocks.group.mockImplementation(async()=>({members:[{is_self:true,linux_transform_supported:true,input_transform:structuredClone(stored)}]}));
+  mocks.transform.mockImplementation(async(_device,value)=>{stored=structuredClone(value);});
+  const mounted=renderHook(usePreferences);
+  await waitFor(()=>expect(mounted.result.current.linuxTransformSupported).toBe(true));
+  const legacy=structuredClone(stored);
+  act(()=>mounted.result.current.setKeyTargetOs!('linux'));
+  await waitFor(()=>expect(mounted.result.current.keyTargetOs).toBe('linux'));
+  expect(mocks.transform).not.toHaveBeenCalled();
+  await act(async()=>mounted.result.current.setPrefs(p=>({...p,keyPreset:'custom',keyCustom:{...p.keyCustom,win:{keys:{...p.keyCustom.win.keys,ctrl:'win'}}}})));
+  expect(stored.linux?.keyboard.table).toContainEqual({from:0x700e0,to:0x700e3});
+  expect(stored.macos).toEqual(legacy.macos);
+  expect(stored.windows).toEqual(legacy.windows);
+  mounted.unmount();
+  const reloaded=renderHook(usePreferences);
+  await waitFor(()=>expect(reloaded.result.current.linuxTransformSupported).toBe(true));
+  act(()=>reloaded.result.current.setKeyTargetOs!('linux'));
+  await waitFor(()=>expect(reloaded.result.current.prefs.keyCustom.win.keys.ctrl).toBe('win'));
+});
+
+it('does not infer Linux editing from defaulted transform data on an old owner',async()=>{
+  const keyboard={preset:'none' as const,table:[]};
+  const linux={reverse_wheel:true,keyboard};
+  let stored:InputTransform={macos:{reverse_wheel:false,keyboard},windows:{reverse_wheel:false,keyboard},linux,overrides:[]};
+  mocks.state={...mocks.state,boot:{platform:'windows'},overview:{this_device:{id:'self'}}};
+  mocks.group.mockImplementation(async()=>({members:[{is_self:true,input_transform:structuredClone(stored)}]}));
+  mocks.transform.mockImplementation(async(_device,value)=>{stored=structuredClone(value);});
+  const {result}=renderHook(usePreferences);
+  await waitFor(()=>expect(result.current.canEdit('keymap')).toBe(true));
+  expect(result.current.linuxTransformSupported).toBe(false);
+  act(()=>result.current.setKeyTargetOs!('linux'));
+  expect(result.current.keyTargetOs).toBe('macos');
+  expect(mocks.transform).not.toHaveBeenCalled();
+  await act(async()=>result.current.set('scrollInvert',true));
+  expect(stored.linux).toEqual(linux);
+  expect(stored.macos.keyboard).toEqual(keyboard);
+});
+
+it('reads the Linux source wheel independently and preserves keyboards when changing it',async()=>{
+  const mac={preset:'custom' as const,table:[{from:0x700e0,to:0x700e6}]};
+  const windows={preset:'custom' as const,table:[{from:0x700e0,to:0x700e7}]};
+  let stored:InputTransform={macos:{reverse_wheel:false,keyboard:mac},windows:{reverse_wheel:false,keyboard:windows},linux:{reverse_wheel:true,keyboard:{preset:'none',table:[]}},overrides:[]};
+  const before=structuredClone(stored);
+  mocks.state={...mocks.state,boot:{platform:'linux'},overview:{this_device:{id:'self'}}};
+  mocks.group.mockImplementation(async()=>({members:[{is_self:true,linux_transform_supported:true,input_transform:structuredClone(stored)}]}));
+  mocks.transform.mockImplementation(async(_device,value)=>{stored=structuredClone(value);});
+  const {result}=renderHook(usePreferences);
+  await waitFor(()=>expect(result.current.prefs.scrollInvert).toBe(true));
+  expect(result.current.keySourceOs).toBe('linux');
+  expect(result.current.keyTargetOs).toBe('windows');
+  expect(result.current.prefs.keyCustom.win.keys.ctrl).toBe('rightWin');
+  await act(async()=>result.current.set('scrollInvert',false));
+  for(const target of ['macos','windows','linux'] as const){
+    expect(stored[target]!.reverse_wheel).toBe(false);
+    expect(stored[target]!.keyboard).toEqual(before[target]!.keyboard);
+  }
+  expect(mocks.input).not.toHaveBeenCalled();
+});
+
+it('loads an older transform without Linux fields on a Linux source safely',async()=>{
+  const keyboard={preset:'none' as const,table:[]};
+  mocks.state={...mocks.state,boot:{platform:'linux'},overview:{this_device:{id:'self'}}};
+  mocks.group.mockResolvedValue({members:[{is_self:true,input_transform:{macos:{reverse_wheel:true,keyboard},windows:{reverse_wheel:false,keyboard},overrides:[]}}]});
+  const {result}=renderHook(usePreferences);
+  await waitFor(()=>expect(result.current.canEdit('keymap')).toBe(true));
+  expect(result.current.keyTargetOs).toBe('windows');
+  expect(result.current.prefs.scrollInvert).toBe(false);
+  expect(result.current.canEdit('scrollInvert')).toBe(false);
+  expect(result.current.prefs.keyCustom.win.keys.ctrl).toBe('ctrl');
+  expect(mocks.transform).not.toHaveBeenCalled();
+});

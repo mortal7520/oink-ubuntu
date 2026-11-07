@@ -249,6 +249,7 @@ fn test_group() -> GroupView {
             mouse_mode: None,
             keyboard_mode: None,
             input_transform: None,
+            linux_transform_supported: false,
             screen_disabled: None,
             screen_local_input: None,
             sharing: SharingState::Establishing,

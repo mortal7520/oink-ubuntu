@@ -36,6 +36,8 @@ pub fn formats() -> dto::FormatSupport {
         vec!["mac-uti"]
     } else if cfg!(windows) {
         vec!["win-name", "win-cf"]
+    } else if cfg!(target_os = "linux") {
+        vec!["mime"]
     } else {
         vec![]
     };

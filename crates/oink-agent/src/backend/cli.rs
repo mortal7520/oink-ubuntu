@@ -70,6 +70,8 @@ pub fn reopen(data_dir: &Path) -> anyhow::Result<()> {
     let parent = executable.parent().ok_or_else(|| anyhow::anyhow!("找不到应用目录"))?;
     let entry = parent.join(if cfg!(windows) {
         "oink.exe"
+    } else if cfg!(target_os = "linux") {
+        "oink"
     } else {
         super::MAC_BACKEND_EXECUTABLE
     });

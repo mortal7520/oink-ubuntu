@@ -125,13 +125,13 @@ fn refresh(app: &AppHandle) {
         }
         #[cfg(target_os = "macos")]
         crate::dock_controls::update(app, &model);
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         if let Err(error) = windows_menu(app, &model) {
             tracing::warn!(%error,"native tray menu update failed");
         }
     });
 }
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn windows_menu(app: &AppHandle, model: &oink_agent::native_controls::Model) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
     let menu = Menu::new(app)?;
@@ -161,8 +161,10 @@ fn windows_menu(app: &AppHandle, model: &oink_agent::native_controls::Model) -> 
     }
     if let Some(tray) = app.tray_by_id("main") {
         tray.set_menu(Some(menu.clone()))?;
+        #[cfg(windows)]
         crate::tray_windows::set_menu(menu, model)?;
     }
+    #[cfg(windows)]
     if let Err(error) = crate::jump_controls::update(app, model) {
         tracing::warn!(%error,"taskbar menu update failed");
     }

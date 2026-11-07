@@ -2219,3 +2219,16 @@ mod owner_tests {
         node.shutdown().await;
     }
 }
+
+#[cfg(target_os = "linux")]
+fn system_language() -> String {
+    for key in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = std::env::var(key) {
+            let value = value.split(':').next().unwrap_or("").split('.').next().unwrap_or("");
+            if !value.is_empty() && !matches!(value, "C" | "POSIX") {
+                return value.replace('_', "-");
+            }
+        }
+    }
+    "en-US".into()
+}

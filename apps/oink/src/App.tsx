@@ -77,7 +77,7 @@ export function App() {
     const prefs = usePreferences();
     const view = new URLSearchParams(location.search).get('view') ?? 'main';
     const pairing = usePairing(view === 'main');
-    const platform = state.boot?.platform === 'windows' ? 'win' : 'mac';
+    const platform = state.boot?.platform === 'macos' ? 'mac' : 'win';
     const [controlTargets,setControlTargets]=useState<ReadonlyMap<string,ControlAction[]>>(()=>new Map());
     const [controls]=useState(()=>new ControlActions({
         read:(device,action)=>controlObservation(agent.get().cards,device,action),
@@ -223,7 +223,7 @@ export function App() {
             const window=getCurrentWindow();
             // macOS zoom keeps a floating shell; fullscreen and Windows
             // maximization fill the desktop without a gutter or corners.
-            const update=async()=>setMaximized(await window.isFullscreen() || (await window.isMaximized() && state.boot?.platform === 'windows'));
+            const update=async()=>setMaximized(await window.isFullscreen() || (await window.isMaximized() && state.boot?.platform !== 'macos'));
             await update();
             const resized=await window.onResized(()=>{void update();});
             const focused=await window.onFocusChanged(event=>setWindowActive(event.payload));
@@ -242,7 +242,7 @@ export function App() {
         return observePanel(winEl);
     }, [view,winEl,self?.id,!!prefs.local]);
     useEffect(() => {
-        if (state.boot?.platform === 'windows' && prefs.local) void shell.setStatusIcon(prefs.local.show_status_icon).catch(() => agent.fail('unavailable'));
+        if (state.boot?.platform !== 'macos' && prefs.local) void shell.setStatusIcon(prefs.local.show_status_icon).catch(() => agent.fail('unavailable'));
     }, [state.boot?.platform,prefs.local?.show_status_icon]);
     useEffect(() => {if(prefs.local)void shell.setLogLevel(prefs.local.log_level).catch(()=>agent.fail('unavailable'));},[prefs.local?.log_level]);
     useEffect(() => {if(prefs.local)void shell.setLanguage(prefs.local.ui_language).catch(()=>agent.fail('unavailable'));},[prefs.local?.ui_language]);

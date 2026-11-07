@@ -1,3 +1,5 @@
+> **Local modified edition:** this checkout adds Ubuntu 24.04 x86_64 / X11 support. It is not an upstream Linux release. See [Ubuntu build and validation notes](README.ubuntu.md).
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.png">

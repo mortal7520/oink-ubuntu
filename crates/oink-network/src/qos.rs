@@ -84,6 +84,8 @@ fn read_service_type(sock: &std::net::UdpSocket) -> i32 {
 
 #[cfg(any(target_os = "macos", test))]
 mod datagram;
+#[cfg(target_os = "linux")]
+mod linux_probe;
 #[cfg(any(windows, test))]
 mod source_hint;
 #[cfg(target_os = "macos")]
@@ -189,7 +191,11 @@ pub(crate) fn wrap_probe_socket(socket: std::net::UdpSocket) -> std::io::Result<
     {
         windows_udp::Socket::wrap_mode(socket, true)
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        linux_probe::Socket::wrap(socket)
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         quinn::Runtime::wrap_udp_socket(&quinn::TokioRuntime, socket)
     }

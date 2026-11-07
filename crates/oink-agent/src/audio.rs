@@ -88,42 +88,42 @@ impl CaptureStream for Capture {
         }
     }
     fn finish(&mut self) -> Option<String> {
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         {
             Capture::finish(self)
         }
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
         {
             None
         }
     }
     fn default_output_changed(&self) -> bool {
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         {
             Capture::default_output_changed(self)
         }
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
         {
             false
         }
     }
     fn local_controls_changed(&self) -> bool {
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         {
             Capture::local_controls_changed(self)
         }
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
         {
             false
         }
     }
 
     fn restart_reason(&self) -> Option<String> {
-        #[cfg(any(target_os = "macos", windows))]
+        #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
         {
             Capture::restart_reason(self)
         }
-        #[cfg(not(any(target_os = "macos", windows)))]
+        #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
         {
             None
         }
@@ -263,7 +263,7 @@ impl AudioPlatform for UnitTestAudio {
     }
 }
 struct SystemAudio {
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     recovery_dir: std::path::PathBuf,
 }
 impl AudioPlatform for SystemAudio {
@@ -303,7 +303,9 @@ impl AudioPlatform for SystemAudio {
             options.recovery_dir = Some(self.recovery_dir.clone());
             Capture::start_encoded(encoder, mute_source, options)
         };
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(target_os = "linux")]
+        let capture = Capture::start_encoded_with_scope(encoder, mute_source, self.recovery_dir.clone(), scope);
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
         let capture: Result<Capture, String> = {
             let _ = (encoder, mute_source, scope);
             Err("system capture unsupported".into())

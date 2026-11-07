@@ -1,3 +1,5 @@
+> **本地修改版：** 本工作副本增加 Ubuntu 24.04 x86_64 / X11 适配，不代表上游已发布 Linux 版本。构建、使用及验收边界见 [Ubuntu 说明](README.ubuntu.md)。
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-zh-CN-dark.png">

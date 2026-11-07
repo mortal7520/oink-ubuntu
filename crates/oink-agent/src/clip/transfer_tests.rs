@@ -42,14 +42,21 @@ fn rich_text_readers_do_not_create_a_waiting_file_transfer() {
             let items = vec![
                 ClipData::Html("<p>clipboard reader</p>".repeat(40)),
                 ClipData::Text("clipboard reader".into()),
-                ClipData::Custom {
-                    platform: if cfg!(target_os = "macos") {
-                        oink_foundation::clipboard::ClipPlatform::Mac
-                    } else {
-                        oink_foundation::clipboard::ClipPlatform::Windows
-                    },
-                    name: "org.oink.test.native".into(),
-                    bytes: vec![0x5a; 1903],
+                if cfg!(target_os = "linux") {
+                    // Keep a third real reader and its exact-byte assertion,
+                    // using Linux's implemented portable RTF contract. An
+                    // opaque Windows-only payload must be filtered on Linux.
+                    ClipData::Rtf(vec![0x5a; 1903])
+                } else {
+                    ClipData::Custom {
+                        platform: if cfg!(target_os = "macos") {
+                            oink_foundation::clipboard::ClipPlatform::Mac
+                        } else {
+                            oink_foundation::clipboard::ClipPlatform::Windows
+                        },
+                        name: "org.oink.test.native".into(),
+                        bytes: vec![0x5a; 1903],
+                    }
                 },
             ];
             source.copy(items.clone(), Sensitivity::Normal);

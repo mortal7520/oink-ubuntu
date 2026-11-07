@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, call } from '../api/client';
 import { agent, useAgent } from '../api/store';
-import type { InputTransform, KeyboardMapping } from '../api/types';
+import type { InputTransform, InputTargetOs, KeyboardMapping, TargetTransform } from '../api/types';
 import { setLanguage } from '../i18n';
 import { shortcutId } from './Shortcuts';
 import { DEFAULT_PREFS, presetMap, type Prefs, type PrefsApi, type KeyMap } from './prefs';
@@ -25,9 +25,13 @@ function readPresentation(): PresentationPreferences {
   try { const stored = JSON.parse(localStorage.getItem('oink:prefs') ?? '{}'); return { motion: ['auto','reduced','full'].includes(stored.motion) ? stored.motion : 'auto', hide_sponsor: stored.hide_sponsor === true, compact_layout: stored.compact_layout !== false }; }
   catch { return {motion:'auto',hide_sponsor:false,compact_layout:true}; }
 }
-export function editTransform(current: InputTransform, platform: 'mac'|'win', prefs: Prefs, reverseWheel?: boolean): InputTransform {
-  const target = platform === 'mac' ? 'windows' : 'macos';
-  const previous=current[target].keyboard, map=prefs.keyCustom[platform];
+export function readTargetTransform(current: InputTransform, target: InputTargetOs): TargetTransform {
+  return current[target] ?? {reverse_wheel:false,keyboard:{preset:'none',table:[]}};
+}
+export function editTransform(current: InputTransform, platform: 'mac'|'win', prefs: Prefs, reverseWheel?: boolean, target: InputTargetOs = platform === 'mac' ? 'windows' : 'macos', options: {keyboard?:boolean;linuxSupported?:boolean;sourceOs?:InputTargetOs} = {}): InputTransform {
+  const linuxSupported=options.linuxSupported??(current.linux!==undefined);
+  if(target==='linux'&&!linuxSupported)throw new Error('linux_transform_unsupported');
+  const previous=readTargetTransform(current,target).keyboard, map=prefs.keyCustom[platform];
   const entries=Object.entries(map.keys);
   if(platform==='mac'&&prefs.allowFnMapping&&!entries.some(([from])=>from==='fn'))entries.push(['fn','ctrl']);
   const edited=new Set(entries.map(([from])=>usage[from]));
@@ -39,26 +43,27 @@ export function editTransform(current: InputTransform, platform: 'mac'|'win', pr
   const saved=prefs.keyPreset==='custom'||prefs.keyCustomTouched[platform]?{
     table:customTable,caps_hold:map.capsLong===undefined?null:keyCode(map.capsLong),caps_split:prefs.capsSplit,allow_fn:platform==='mac'&&prefs.allowFnMapping,
   }:previous.saved_custom;
-  const presetEntries=prefs.keyPreset==='custom'?[]:Object.entries(presetMap(platform,prefs.keyPreset,false).keys).map(([from,to])=>({from:usage[from],to:keyCode(to)}));
+  const presetEntries=prefs.keyPreset==='custom'?[]:Object.entries(presetMap(platform,prefs.keyPreset,false,target,options.sourceOs).keys).map(([from,to])=>({from:usage[from],to:keyCode(to)}));
   const table=prefs.keyPreset==='custom'
     ?customTable.filter(m=>platform!=='mac'||prefs.allowFnMapping||m.from!==usage.fn)
     :presetEntries.flatMap(m=>m.from>=hid(224)&&m.from<=hid(227)&&m.to>=hid(224)&&m.to<=hid(227)?[m,{from:m.from+4,to:m.to+4}]:[m]);
   const keyboard:KeyboardMapping={preset:prefs.keyPreset==='custom'?'custom':prefs.keyPreset==='mac'?'mac_feel':'win_feel',table,saved_custom:saved,
     caps_tap_hold:prefs.keyPreset==='custom'&&prefs.capsSplit&&map.capsLong!==undefined?{tap:keyCode(map.keys.caps??'caps'),hold:keyCode(map.capsLong)}:null};
   if(keyboard.caps_tap_hold)keyboard.table=table.filter(m=>m.from!==usage.caps);
-  const result = {...current,[target]:{...current[target],keyboard}};
+  const result:InputTransform = options.keyboard===false?{...current}:{...current,[target]:{...readTargetTransform(current,target),keyboard}};
   // Wheel direction belongs to this source mouse, regardless of its target.
   // Keyboard tables and per-device keyboard overrides remain independent.
   if (reverseWheel !== undefined) {
     result.macos = {...result.macos,reverse_wheel:reverseWheel};
     result.windows = {...result.windows,reverse_wheel:reverseWheel};
+    if(linuxSupported)result.linux={...readTargetTransform(result,'linux'),reverse_wheel:reverseWheel};
     result.overrides = result.overrides.filter(o=>o.keyboard!==null).map(o=>({...o,reverse_wheel:null}));
   }
   return result;
 }
 /** Decode the source-owned table without inventing a disabled Fn identity mapping. */
-export function readKeyboardMapping(keyboard: KeyboardMapping, platform: 'mac'|'win') {
-  const destinationNames=platform==='mac'?['ctrl','win','alt','shift','caps','none','rightCtrl','rightShift','rightAlt','rightWin']:['control','option','command','shift','caps','none'];
+export function readKeyboardMapping(keyboard: KeyboardMapping, platform: 'mac'|'win', target: InputTargetOs = platform === 'mac' ? 'windows' : 'macos') {
+  const destinationNames=target!=='macos'?['ctrl','win','alt','shift','caps','none','rightCtrl','rightShift','rightAlt','rightWin']:['control','option','command','shift','caps','none','rightCtrl','rightShift','rightAlt','rightWin'];
   const saved=keyboard.saved_custom,activeCustom=keyboard.preset==='custom';
   // Old writers preserve unknown metadata but can still edit the active table.
   // In Custom, that table wins; the backup only supplies disabled assignments.
@@ -77,18 +82,28 @@ export function usePreferences(): PrefsApi {
   const [prefs,setPrefs] = useState(DEFAULT_PREFS);
   const [presentation,setPresentation] = useState(readPresentation);
   const [transform,setTransform] = useState<InputTransform|null>(null);
+  const [linuxTransformSupported,setLinuxTransformSupported] = useState(false);
+  const [selectedTarget,setSelectedTarget] = useState<InputTargetOs|null>(null);
   const report=state.report;
   const [pending,setPending] = useState(false);
   const busy = useRef(false), queued = useRef<Prefs|null>(null), committed = useRef(prefs), latest = useRef(prefs);
   latest.current = prefs;
   const local = state.localPreferences;
-  const platform = state.boot?.platform === 'windows' ? 'win' : 'mac';
+  const sourceOs:InputTargetOs=state.boot?.platform??'windows';
+  const platform=sourceOs==='macos'?'mac':'win';
+  const defaultTarget:InputTargetOs=platform==='mac'||sourceOs==='linux'?'windows':'macos';
+  const targetOs=selectedTarget==='linux'&&!linuxTransformSupported?defaultTarget:selectedTarget??defaultTarget;
+  const applyGroup=(group:import('../api/types').GroupView)=>{
+    const owner=group.members.find(m=>m.is_self);
+    setTransform(owner?.input_transform??null);
+    setLinuxTransformSupported(owner?.linux_transform_supported===true);
+  };
   useEffect(()=>{
-    void api.group().then(group=>setTransform(group.members.find(m=>m.is_self)?.input_transform??null)).catch(()=>{});
+    void api.group().then(applyGroup).catch(()=>{});
     const refresh = () => {void Promise.allSettled([agent.query('launch',api.launchAtLoginStatus),agent.query('fileProvider',api.fileProviderStatus)]);};
     window.addEventListener('focus',refresh); return () => window.removeEventListener('focus',refresh);
   },[]);
-  useEffect(()=>agent.onEvent(event=>{if(event.type==='group')setTransform(event.data.members.find(m=>m.is_self)?.input_transform??null);else if(event.type==='input_transform_edited')void api.group().then(group=>setTransform(group.members.find(m=>m.is_self)?.input_transform??null)).catch(()=>{});}),[]);
+  useEffect(()=>agent.onEvent(event=>{if(event.type==='group')applyGroup(event.data);else if(event.type==='input_transform_edited')void api.group().then(applyGroup).catch(()=>{});}),[]);
   useEffect(()=>{
     if(local) setLanguage(local.ui_language);
     if(busy.current)return;
@@ -107,12 +122,12 @@ export function usePreferences(): PrefsApi {
   },[local,state.input,state.clipboard,state.audio,state.launch,state.diagnostics,report,presentation,pending]);
   useEffect(()=>{
     if(!transform||busy.current)return;
-    const target=platform==='mac'?'windows':'macos',keyboard=transform[target].keyboard;
-    const decoded=readKeyboardMapping(keyboard,platform);
-    setPrefs(p=>{const next={...p,keyPreset:decoded.keyPreset,scrollInvert:transform[platform==='mac'?'macos':'windows'].reverse_wheel,capsSplit:decoded.capsSplit,allowFnMapping:decoded.allowFnMapping,
+    const keyboard=readTargetTransform(transform,targetOs).keyboard;
+    const decoded=readKeyboardMapping(keyboard,platform,targetOs);
+    setPrefs(p=>{const next={...p,keyPreset:decoded.keyPreset,scrollInvert:readTargetTransform(transform,sourceOs).reverse_wheel,capsSplit:decoded.capsSplit,allowFnMapping:decoded.allowFnMapping,
       keyCustom:{...p.keyCustom,[platform]:decoded.map},keyCustomTouched:{...p.keyCustomTouched,[platform]:decoded.hasCustom}};
       committed.current=next;return next;});
-  },[transform,platform,pending]);
+  },[transform,platform,sourceOs,targetOs,pending]);
   const save = async(next:Prefs):Promise<void>=>{
     setPrefs(next);
     if(busy.current){queued.current=next;return;}
@@ -154,7 +169,9 @@ export function usePreferences(): PrefsApi {
       }
       if((['scrollInvert','keyPreset','keyCustom','capsSplit','allowFnMapping'] as const).some(changed)){
         if(!transform||!current.overview)throw new Error('unavailable');
-        const edited=editTransform(transform,platform,next,changed('scrollInvert')?next.scrollInvert:undefined);await api.setInputTransform(current.overview.this_device.id,edited);setTransform(edited);
+        if(targetOs==='linux'&&!linuxTransformSupported||changed('scrollInvert')&&sourceOs==='linux'&&!linuxTransformSupported)throw new Error('linux_transform_unsupported');
+        const keyboard=(['keyPreset','keyCustom','capsSplit','allowFnMapping'] as const).some(changed);
+        const edited=editTransform(transform,platform,next,changed('scrollInvert')?next.scrollInvert:undefined,targetOs,{keyboard,linuxSupported:linuxTransformSupported,sourceOs});await api.setInputTransform(current.overview.this_device.id,edited);setTransform(edited);
       }
       if(changed('crashReports')){
         if(!report)throw new Error('unavailable');
@@ -165,9 +182,10 @@ export function usePreferences(): PrefsApi {
     }catch{setPrefs(previous);queued.current=null;agent.fail('unavailable');}
     finally{busy.current=false;setPending(false);const follow=queued.current;queued.current=null;if(follow)void save(follow);}
   };
-  return{prefs,pending,launchStatus:state.launch,canEdit: key => {
+  return{prefs,pending,keySourceOs:sourceOs,keyTargetOs:targetOs,linuxTransformSupported,setKeyTargetOs:target=>{if(!busy.current&&(target!=='linux'||linuxTransformSupported))setSelectedTarget(target);},launchStatus:state.launch,canEdit: key => {
       if(['language','showInMenuBar','confirmQuit','notificationLevel','logLevel','logMaxMb','theme','accent'].includes(key))return local!==null;
-      if(['keymap','scrollInvert'].includes(key))return transform!==null;
+      if(key==='keymap')return transform!==null&&(targetOs!=='linux'||linuxTransformSupported);
+      if(key==='scrollInvert')return transform!==null&&(sourceOs!=='linux'||linuxTransformSupported);
       if(['pollLimit','pointerGain','keepAwake','pointerTrail','touchpadInject','nativeMultifinger','macScrollFeel','forwardWheelByLines','forwardInjectedInput','takeForegroundOnLeave','escStop'].includes(key)||key.startsWith('sc-'))return state.input!==null;
       if(key.startsWith('clip')||key==='removeDsStore')return state.clipboard!==null;
       if(['audioEncodingQuality','audioDevice','keepLocalPlayback'].includes(key))return state.audio!==null;

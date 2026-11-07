@@ -83,7 +83,7 @@ impl Inventory {
             })
         }));
         for rep in self.items.iter().flat_map(|item| &item.representations) {
-            if target != ClipPlatform::Unknown
+            if (target != ClipPlatform::Unknown || cfg!(target_os = "linux"))
                 && let RepresentationData::Promise(id, _) = rep.data
                 && seen.insert(id)
             {
@@ -121,7 +121,18 @@ impl Inventory {
             let skip = item.file.is_some_and(|id| skipped.contains(&id));
             item.representations.iter().filter(move |rep| {
                 !skip
-                    && target != ClipPlatform::Unknown
+                    && (target != ClipPlatform::Unknown || cfg!(target_os = "linux"))
+                    // Unknown is also the open-wire future-platform value.
+                    // A Linux-to-Linux native reconstruction is authorized
+                    // only by the exact MIME contract this backend implements;
+                    // knowing a portable tag must not unlock future opaque raw.
+                    && (target != ClipPlatform::Unknown
+                        || self.platform != ClipPlatform::Unknown
+                        || matches!(rep.data, RepresentationData::File(_))
+                        || rep.standard.is_some_and(|format| {
+                            matches!(&rep.format, NativeFormat::Unknown(name)
+                                if name == crate::negotiation::portable_format(format))
+                        }))
                     && !matches!(rep.data, RepresentationData::Unavailable(_))
                     && ((target == self.platform && rep.format.platform() != ClipPlatform::Unknown)
                         || matches!(rep.data, RepresentationData::File(_))
@@ -159,14 +170,26 @@ impl Inventory {
                     };
                     Some(bound)
                 })
-                .chain(self.roots.iter().filter(|_| target == ClipPlatform::Mac).map(|node| {
-                    if node.parent.is_none() && node.kind == NodeKind::File && node.valid() {
-                        node.size
-                    } else {
-                        ContentSize::Unknown
-                    }
-                }))
-                .chain((target == ClipPlatform::Mac && self.has_promises()).then_some(ContentSize::Unknown)),
+                .chain(
+                    self.roots
+                        .iter()
+                        .filter(|_| {
+                            target == ClipPlatform::Mac
+                                || (cfg!(target_os = "linux") && target == ClipPlatform::Unknown)
+                        })
+                        .map(|node| {
+                            if node.parent.is_none() && node.kind == NodeKind::File && node.valid() {
+                                node.size
+                            } else {
+                                ContentSize::Unknown
+                            }
+                        }),
+                )
+                .chain(
+                    ((target == ClipPlatform::Mac || (cfg!(target_os = "linux") && target == ClipPlatform::Unknown))
+                        && self.has_promises())
+                    .then_some(ContentSize::Unknown),
+                ),
             AUTO_PULL_BYTES,
         )
     }

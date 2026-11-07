@@ -74,3 +74,25 @@ mod tests {
         );
     }
 }
+
+#[cfg(target_os = "linux")]
+pub fn preferred_languages() -> Vec<String> {
+    let mut result = Vec::new();
+    for key in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = std::env::var(key) {
+            for entry in value.split(':') {
+                let locale = entry.split('.').next().unwrap_or("").split('@').next().unwrap_or("");
+                if !locale.is_empty() && !matches!(locale, "C" | "POSIX") {
+                    let tag = locale.replace('_', "-");
+                    if !result.contains(&tag) {
+                        result.push(tag);
+                    }
+                }
+            }
+        }
+    }
+    if result.is_empty() {
+        result.push("en-US".into());
+    }
+    result
+}

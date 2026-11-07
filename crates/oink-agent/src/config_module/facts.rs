@@ -678,7 +678,7 @@ pub(super) fn for_keymap_capability(facts: dto::DeviceFacts, supported: bool) ->
             let Some(RawValue::Map(transform)) = preference.get_mut(&3) else {
                 continue;
             };
-            for key in [1, 2] {
+            for key in [1, 2, 4] {
                 if let Some(RawValue::Map(target)) = transform.get_mut(&key)
                     && let Some(mapping) = target.get_mut(&2)
                 {
@@ -761,6 +761,7 @@ mod keymap_compatibility_tests {
             }),
         };
         let transform = InputTransform {
+            linux: TargetTransform::default(),
             macos: TargetTransform {
                 reverse_wheel: true,
                 keyboard: keyboard.clone(),

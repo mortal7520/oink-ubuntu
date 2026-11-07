@@ -27,7 +27,9 @@ impl Router {
     fn source_caps_mapping(&self, target: Target) -> Option<CapsTapHold> {
         let (device, os) = match target {
             Target::Remote(d) => (d, self.peers.get(&d)?.os),
-            Target::Local | Target::LocalInjected if self.cfg.os == Os::Windows => (self.me(), self.cfg.os),
+            Target::Local | Target::LocalInjected if matches!(self.cfg.os, Os::Windows | Os::Linux) => {
+                (self.me(), self.cfg.os)
+            }
             // Local Mac Caps owns native HID/TSM state; leave it to macOS.
             _ => return None,
         };

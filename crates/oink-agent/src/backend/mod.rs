@@ -335,7 +335,20 @@ pub fn reopen() -> ApiResult<()> {
         node.emit(ApiEvent::ReopenOink);
         Ok(())
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        let prepared = crate::update::prepare_reopen(&node)?;
+        let entry = std::env::current_exe()
+            .map_err(|e| ApiError::Internal { message: e.to_string() })?
+            .with_file_name("oink");
+        launch::reopen_entry(&entry, &oink_foundation::paths::data_dir())
+            .map_err(|e| ApiError::Unavailable { message: e.to_string() })?;
+        prepared.shutdown().map_err(|_| ApiError::Unavailable {
+            message: "reopen drain expired".into(),
+        })?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = node;
         Err(ApiError::Unsupported {

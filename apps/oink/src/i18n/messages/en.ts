@@ -461,6 +461,9 @@ export const en = {
   "屏蔽的设备": "Blocked devices",
   "把 {0} 移出屏蔽名单": "Unblock {0}",
   "移除": "Remove",
+  "按键映射": "Key mapping",
+  "使用本机键盘控制所选系统的设备时，修饰键怎么对应": "How modifier keys map when this keyboard controls devices with the selected system",
+  "目标系统": "Target system",
   // settings/KeyMap.tsx
   "按键映射 → {0}": "Key mapping → {0}",
   "Mac 手感": "Mac feel",

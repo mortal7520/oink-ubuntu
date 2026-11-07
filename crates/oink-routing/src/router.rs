@@ -1770,6 +1770,25 @@ impl Router {
                         self.local_rewrite = Some(oink_foundation::input::LocalRewrite::Key { code: mapped, pressed });
                     }
                 }
+                if disposition == Disposition::Pass && self.cfg.os == Os::Linux {
+                    // XI2 slave capture replays through XTest. Its native ledger
+                    // owns alias refcounts; retain only the DOWN-time mapping
+                    // here so a settings edit cannot change a held key.
+                    let mapped = if pressed {
+                        let mapped = self
+                            .local_mapped
+                            .get(&code)
+                            .copied()
+                            .unwrap_or_else(|| self.map_key(self.me(), code));
+                        self.local_mapped.insert(code, mapped);
+                        mapped
+                    } else {
+                        self.local_mapped.remove(&code).unwrap_or(code)
+                    };
+                    if mapped != code {
+                        self.local_rewrite = Some(oink_foundation::input::LocalRewrite::Key { code: mapped, pressed });
+                    }
+                }
                 disposition
             }
             InputEvent::Scroll {
@@ -2226,8 +2245,8 @@ impl Router {
             // event in the transformed local sequence, including identity keys:
             // letting an ordinary key pass could overtake its injected modifier.
             if t == Target::Local
-                && self.cfg.os == Os::Windows
-                && (!self.resolved_transform(self.me()).keyboard.table.is_empty() || self.local_caps_mapping())
+                && ((self.cfg.os == Os::Windows && !self.resolved_transform(self.me()).keyboard.table.is_empty())
+                    || (matches!(self.cfg.os, Os::Windows | Os::Linux) && self.local_caps_mapping()))
             {
                 self.target_key(self.me(), code, true);
                 t = Target::LocalInjected;
@@ -2342,7 +2361,7 @@ impl Router {
                     && phase == ScrollPhase::None
                     && self.resolved_transform(self.me()).reverse_wheel
                 {
-                    if self.cfg.os == Os::MacOS {
+                    if matches!(self.cfg.os, Os::MacOS | Os::Linux) {
                         self.local_rewrite = Some(oink_foundation::input::LocalRewrite::ReverseWheel);
                     } else if self.cfg.os == Os::Windows {
                         self.out.push(Output::Inject(InjectEvent::Scroll {
@@ -3317,7 +3336,7 @@ impl Router {
             source == SourceKind::Mouse && phase == ScrollPhase::None && self.resolved_transform(origin).reverse_wheel;
         let sign = if invert { -1.0 } else { 1.0 };
         let out_unit = s.scroll_output.unwrap_or(match self.cfg.os {
-            Os::Windows => ScrollUnit::Line,
+            Os::Windows | Os::Linux => ScrollUnit::Line,
             _ => ScrollUnit::Pixel,
         });
         let mpu = LEGACY_SCROLL_REFERENCE_PER_PIXEL;
@@ -3832,7 +3851,9 @@ impl Router {
     }
 
     pub(super) fn cancel_source_scroll(&mut self) {
-        let Some(route) = self.scroll_target else { return };
+        let Some(route) = self.scroll_target else {
+            return;
+        };
         // macOS can deliver finger and momentum phases independently, including
         // an Ended with no momentum. Before discarding physical tails at a focus
         // or capture boundary, close both live parts at the ORIGINAL target.
@@ -3992,7 +4013,7 @@ impl Router {
     fn fn_mapping_enabled(&self) -> bool {
         self.cfg.os == Os::MacOS
             && self.input_transforms.get(&self.me()).is_some_and(|t| {
-                [&t.macos.keyboard, &t.windows.keyboard]
+                [&t.macos.keyboard, &t.windows.keyboard, &t.linux.keyboard]
                     .into_iter()
                     .chain(t.overrides.iter().filter_map(|o| o.keyboard.as_ref()))
                     .any(|k| {

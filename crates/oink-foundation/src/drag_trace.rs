@@ -245,7 +245,20 @@ fn thread_info() -> (u64, u8, i32) {
             (id, (pthread_main_np() != 0) as u8, -1)
         }
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        unsafe extern "C" {
+            fn gettid() -> i32;
+            fn getpid() -> i32;
+        }
+        // SAFETY: Ubuntu glibc exposes these read-only scalar queries. They
+        // neither allocate nor alter priority, locks or process signal state.
+        unsafe {
+            let id = gettid();
+            (id as u64, (id == getpid()) as u8, -1)
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         (0, 0, -1)
     }

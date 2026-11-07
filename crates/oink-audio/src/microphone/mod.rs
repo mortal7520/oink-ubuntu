@@ -3,9 +3,15 @@
 //! Policy, demand leases and media transport belong to the agent's microphone actor.
 #[cfg(any(target_os = "macos", windows))]
 mod capture;
+#[cfg(target_os = "linux")]
+pub mod linux;
 mod resample;
 mod selection;
 pub mod session;
+#[cfg(target_os = "linux")]
+pub use linux::{
+    Capture, DemandMonitor, default_input, input_candidates, inputs, switch_default_input, virtual_output,
+};
 pub use selection::{DefaultInputHistory, InputCandidate, InputSelection, SelectionError};
 #[cfg(windows)]
 mod windows;
@@ -25,7 +31,9 @@ impl InputDevice {
     /// Forwarding loopbacks cannot be captured as a microphone source, including
     /// when the OS default input points at our own virtual recording endpoint.
     pub fn is_forwarding_loopback(&self) -> bool {
-        self.id.ends_with(MAC_INPUT_UID) || self.id.ends_with("com.across.microphone.input.v1")
+        self.id.ends_with(MAC_INPUT_UID)
+            || self.id == "pulse-source:oink_microphone"
+            || self.id.ends_with("com.across.microphone.input.v1")
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -56,7 +64,9 @@ pub fn permission() -> Permission {
     return macos::permission();
     #[cfg(windows)]
     return Permission::SystemControlled;
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    return Permission::SystemControlled;
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     Permission::Unsupported
 }
 
@@ -83,11 +93,11 @@ pub fn request_permission() -> Result<(), String> {
     Err("microphone authorization is managed by the operating system".into())
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn inputs() -> Result<Vec<InputDevice>, String> {
     Ok(Vec::new())
 }
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn virtual_output() -> Result<VirtualOutput, String> {
     Ok(VirtualOutput::Unsupported)
 }

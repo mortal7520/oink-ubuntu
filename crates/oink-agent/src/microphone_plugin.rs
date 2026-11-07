@@ -2,6 +2,8 @@
 //! group networking or calls the privileged path during discovery/startup.
 use serde::{Deserialize, Serialize};
 mod cache;
+#[cfg(target_os = "linux")]
+mod linux;
 mod progress;
 #[cfg(any(windows, test))]
 mod windows_presence;
@@ -114,19 +116,19 @@ pub fn remove_for_app_uninstall(app: &std::path::Path) -> Result<(), (Microphone
 #[derive(Clone, Default)]
 struct Inspection {
     status: MicrophonePluginStatus,
-    #[cfg(any(windows, test))]
+    #[cfg(any(windows, test, target_os = "linux"))]
     render_id: Option<String>,
 }
 impl From<MicrophonePluginStatus> for Inspection {
     fn from(status: MicrophonePluginStatus) -> Self {
         Self {
             status,
-            #[cfg(any(windows, test))]
+            #[cfg(any(windows, test, target_os = "linux"))]
             render_id: None,
         }
     }
 }
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn virtual_output() -> Option<String> {
     cache::virtual_output()
 }
@@ -142,7 +144,9 @@ fn inspect_status() -> Inspection {
     return macos::status().into();
     #[cfg(windows)]
     return windows::status();
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    return linux::status();
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     MicrophonePluginStatus::default().into()
 }
 pub fn request(action: Action) -> Result<MicrophonePluginStatus, String> {
@@ -177,7 +181,9 @@ fn request_platform(
     return macos::request(action, guard);
     #[cfg(windows)]
     return windows::request(action, guard);
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    return linux::request(action, guard);
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = (action, guard);
         Err("virtual microphone plugin installation is only supported on macOS".into())

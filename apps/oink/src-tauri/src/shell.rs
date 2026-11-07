@@ -66,7 +66,7 @@ fn enqueue(app: &AppHandle, request: WindowRequest) {
             };
             #[cfg(windows)]
             let result = execute_request(&handle, request);
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             let result = {
                 let request_handle = handle.clone();
                 on_ui(&handle, move || execute_request(&request_handle, request))
@@ -170,7 +170,7 @@ pub fn shell_resize_panel(app: AppHandle, window: tauri::WebviewWindow, width: f
         };
         #[cfg(target_os = "macos")]
         crate::panel_macos::resize(&window, rect);
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         if let Some(panel) = app.get_webview_window("panel") {
             let _ = panel.set_size(tauri::PhysicalSize::new(rect.width, rect.height));
             let _ = panel.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
@@ -214,7 +214,7 @@ fn create_or_close_panel(app: &AppHandle, anchor: PanelAnchor) -> tauri::Result<
         .skip_taskbar(true)
         .visible(false)
         .focused(false);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     let builder = builder.always_on_top(true);
     // Tauri/Wry clears both native and WebView backings. The macOS panel paints
     // while invisible and is destroyed on close, so no hidden view keeps running.
@@ -239,6 +239,14 @@ fn create_or_close_panel(app: &AppHandle, anchor: PanelAnchor) -> tauri::Result<
                 window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y))?;
                 window.set_size(tauri::PhysicalSize::new(rect.width, rect.height))?;
                 show_windows(&window, OpenTrigger::Tray.activation())
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let _ = handle;
+                window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y))?;
+                window.set_size(tauri::PhysicalSize::new(rect.width, rect.height))?;
+                window.show()?;
+                window.set_focus()
             }
         })
     });
@@ -270,7 +278,11 @@ fn builder(app: &AppHandle, view: View) -> WebviewWindowBuilder<'_, tauri::Wry, 
     // App URLs preserve the query in both devUrl and the embedded asset protocol.
     let path = format!("index.html?view={}", view.label());
     let builder = WebviewWindowBuilder::new(app, view.label(), WebviewUrl::App(path.into()))
-        .title("Oink")
+        .title(if cfg!(target_os = "linux") {
+            "Oink Ubuntu (modified)"
+        } else {
+            "Oink"
+        })
         .initialization_script(crate::app::ERROR_REPORTER)
         .initialization_script(crate::system_locale::initialization_script());
     #[cfg(windows)]
@@ -346,7 +358,7 @@ fn create_normal(app: &AppHandle, view: View) -> tauri::Result<()> {
             // native control bounds via shell_titlebar_center: this inset alone
             // produces different visible centres on macOS 14 and 26.
             .traffic_light_position(tauri::LogicalPosition::new(18.0 + gutter, 24.0 + gutter));
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         let builder = builder.decorations(view == View::About).shadow(view != View::Main);
         #[cfg(windows)]
         let builder = if view == View::Main {
@@ -386,7 +398,7 @@ fn create_normal(app: &AppHandle, view: View) -> tauri::Result<()> {
         tracing::info!(view = label, "product window prepared");
         #[cfg(windows)]
         return finish_normal_windows(app, window, created, created && view == View::Main);
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let reveal = {
                 let shell = app.state::<Shell>();

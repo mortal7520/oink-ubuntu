@@ -1,8 +1,8 @@
 # GPL-3.0-only first-party code. Every dependency expression is evaluated in full.
 [graph]
 all-features = true
-# Audit the complete runtime/build/test graphs for the two shipped targets.
-targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+# Audit the complete runtime/build/test graphs for the three shipped targets.
+targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
 
 [advisories]
 version = 2

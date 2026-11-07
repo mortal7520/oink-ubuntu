@@ -501,6 +501,8 @@ pub struct Member {
     pub mouse_mode: Option<oink_foundation::input::InputMode>,
     pub keyboard_mode: Option<oink_foundation::input::InputMode>,
     pub input_transform: Option<InputTransform>,
+    #[serde(default)]
+    pub linux_transform_supported: bool,
     pub screen_disabled: Option<bool>,
     pub screen_local_input: Option<bool>,
     pub sharing: SharingState,
@@ -775,6 +777,9 @@ fn bounds_of_rects(rects: &[Rect]) -> Option<Rect> {
     Some(Rect::new(x0, y0, x1 - x0, y1 - y0))
 }
 
+/// Optional owner-side support; never a required pairing capability.
+pub const LINUX_TRANSFORM_CAPABILITY: &str = "oink.input.linux-transform/1";
+
 // ───────────────────────── 输入设置（core） ─────────────────────────
 //
 // The service converts these local fields to and from routing settings.
@@ -783,6 +788,8 @@ fn bounds_of_rects(rects: &[Rect]) -> Option<Rect> {
 pub struct InputTransform {
     pub macos: oink_foundation::input_transform::TargetTransform,
     pub windows: oink_foundation::input_transform::TargetTransform,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linux: Option<oink_foundation::input_transform::TargetTransform>,
     pub overrides: Vec<InputTargetOverride>,
     /// Read-only per-entry self limitations; ignored when sending an edit.
     #[serde(default, skip_deserializing)]
@@ -840,6 +847,7 @@ impl From<oink_foundation::input_transform::InputTransform> for InputTransform {
             local_exclusions: Vec::new(),
             macos: value.macos,
             windows: value.windows,
+            linux: Some(value.linux),
             overrides: value
                 .overrides
                 .into_iter()
@@ -857,6 +865,7 @@ impl From<InputTransform> for oink_foundation::input_transform::InputTransform {
         Self {
             macos: value.macos,
             windows: value.windows,
+            linux: value.linux.unwrap_or_default(),
             overrides: value
                 .overrides
                 .into_iter()
@@ -982,12 +991,15 @@ pub use oink_display::layout::EventFrequency;
 pub struct KeySupport {
     pub macos: Vec<oink_foundation::input::KeyCode>,
     pub windows: Vec<oink_foundation::input::KeyCode>,
+    #[serde(default)]
+    pub linux: Vec<oink_foundation::input::KeyCode>,
 }
 impl Default for KeySupport {
     fn default() -> Self {
         Self {
             macos: oink_input::supported_key_codes("macos"),
             windows: oink_input::supported_key_codes("windows"),
+            linux: oink_input::supported_key_codes("linux"),
         }
     }
 }

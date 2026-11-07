@@ -8,6 +8,7 @@ import { DEFAULT_PREFS, type Prefs, type PrefsApi } from './prefs';
 import { setLanguage } from '../i18n';
 
 beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) });
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
@@ -78,5 +79,32 @@ describe('custom None and Fn choices', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Right Ctrl' })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'None' }));
     expect(container.querySelector('[data-key="fn"] .kmap__to')?.textContent).toBe('None');
+  });
+});
+
+
+function TargetMapping({ supported = true, source = 'linux' }: { supported?: boolean; source?: 'macos'|'windows'|'linux' }) {
+  const [prefs,setPrefs]=useState<Prefs>({...DEFAULT_PREFS,keyPreset:'win'});
+  const [target,setTarget]=useState<'macos'|'windows'|'linux'>(source==='macos'?'windows':'macos');
+  return <OinkProvider defaultMotion="reduced"><KeyMapControl platform={source==='macos'?'mac':'win'} api={{prefs,setPrefs,keySourceOs:source,keyTargetOs:target,setKeyTargetOs:setTarget,linuxTransformSupported:supported,pending:false} as PrefsApi} capsIme={false} label="Key mapping" onLog={()=>{}}/></OinkProvider>;
+}
+
+describe('Linux mapping targets',()=>{
+  it('offers an explicit Linux target and labels Linux source and destination Super keys',()=>{
+    setLanguage('en');
+    const {container}=render(<TargetMapping/>);
+    expect(container.querySelector('[data-key="win"] .kmap__from')?.textContent).toBe('Super');
+    fireEvent.click(screen.getByRole('combobox',{name:'Target system'}));
+    fireEvent.click(screen.getByRole('option',{name:'Linux'}));
+    expect(container.querySelector('[data-key="win"] .kmap__to')?.textContent).toBe('Super');
+    expect(container.querySelector('[data-key="ctrl"] .kmap__to')?.textContent).toBe('Ctrl');
+  });
+  it('does not offer Linux editing when an older owner lacks the capability',()=>{
+    setLanguage('en');
+    render(<TargetMapping supported={false}/>);
+    fireEvent.click(screen.getByRole('combobox',{name:'Target system'}));
+    expect(screen.queryByRole('option',{name:'Linux'})).toBeNull();
+    expect(screen.getByRole('option',{name:'macOS'})).toBeTruthy();
+    expect(screen.getByRole('option',{name:'Windows'})).toBeTruthy();
   });
 });

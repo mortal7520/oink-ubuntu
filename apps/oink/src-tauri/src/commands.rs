@@ -14,7 +14,7 @@ pub enum ShellError {
     LogLevelUnavailable,
     #[cfg(target_os = "macos")]
     StatusIconOwnedByBackend,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     StatusIconUnavailable,
 }
 
@@ -40,6 +40,12 @@ pub async fn read_attribution(app: AppHandle, path: String) -> Result<String, Sh
             .ok_or(ShellError::AttributionUnavailable)?
             .join("Resources")
     };
+    #[cfg(target_os = "linux")]
+    let root = std::env::current_exe()
+        .map_err(|_| ShellError::AttributionUnavailable)?
+        .parent()
+        .ok_or(ShellError::AttributionUnavailable)?
+        .join("resources");
     #[cfg(windows)]
     let root = app
         .path()
@@ -58,6 +64,17 @@ pub async fn read_attribution(app: AppHandle, path: String) -> Result<String, Sh
 }
 
 fn open_external(target: &std::ffi::OsStr) -> Result<(), ()> {
+    #[cfg(target_os = "linux")]
+    {
+        // Pass one argument directly; never interpret paths or URLs as shell code.
+        let status = std::process::Command::new("/usr/bin/xdg-open")
+            .arg(target)
+            .status()
+            .map_err(|_| ())?;
+        if !status.success() {
+            return Err(());
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         let status = std::process::Command::new("/usr/bin/open")
@@ -134,7 +151,7 @@ pub fn shell_set_log_level(level: String) -> Result<(), ShellError> {
 /// backend immediately after its authoritative native preference is committed.
 #[tauri::command]
 pub fn shell_set_status_icon(app: AppHandle, visible: bool) -> Result<(), ShellError> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         let tray = app.tray_by_id("main").ok_or(ShellError::StatusIconUnavailable)?;
         tray.set_visible(visible).map_err(|_| ShellError::StatusIconUnavailable)

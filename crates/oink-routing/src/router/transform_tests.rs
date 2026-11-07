@@ -851,3 +851,124 @@ fn modifier_probe_does_not_run_on_ticks_or_for_swallowed_remote_presses() {
     source.retarget_modifiers();
     assert!(source.keys.contains_key(&KeyCode::LEFT_GUI));
 }
+
+#[test]
+fn linux_local_mapping_is_paired_across_edits_and_does_not_apply_mac_alias_suppression() {
+    let mut r = router(Os::Linux);
+    let a = KeyCode::keyboard(4);
+    let b = KeyCode::keyboard(5);
+    let mut s = InputTransform::default();
+    s.linux.keyboard = custom(a, b);
+    r.set_input_transforms([(ME, s.clone())].into());
+    assert_eq!(physical(&mut r, a, true), Disposition::Pass);
+    assert_eq!(r.local_rewrite(), Some(LocalRewrite::Key { code: b, pressed: true }));
+    assert_eq!(
+        physical(&mut r, b, true),
+        Disposition::Pass,
+        "XI2 native leases own alias counts"
+    );
+    assert_eq!(r.local_rewrite(), None);
+    s.linux.keyboard = custom(a, KeyCode::keyboard(6));
+    r.set_input_transforms([(ME, s)].into());
+    assert_eq!(physical(&mut r, a, false), Disposition::Pass);
+    assert_eq!(
+        r.local_rewrite(),
+        Some(LocalRewrite::Key {
+            code: b,
+            pressed: false
+        })
+    );
+    assert_eq!(physical(&mut r, b, false), Disposition::Pass);
+    assert!(r.local_mapped.is_empty());
+    assert!(keys(&mut r).is_empty());
+}
+#[test]
+fn linux_local_and_received_scroll_use_the_native_notch_contract() {
+    let mut r = router(Os::Linux);
+    let mut s = InputTransform::default();
+    s.linux.reverse_wheel = true;
+    r.set_input_transforms([(ME, s.clone()), (SOURCE, s)].into());
+    let event = CapturedEvent {
+        time_us: 1,
+        physical: true,
+        source: SourceKind::Mouse,
+        cursor: None,
+        event: InputEvent::Scroll {
+            dx: 1.,
+            dy: 2.,
+            unit: ScrollUnit::Line,
+            phase: ScrollPhase::None,
+            wheel_steps: Some(Point::new(1., 2.)),
+        },
+    };
+    assert_eq!(r.on_local_event(&event, 1), Disposition::Pass);
+    assert_eq!(r.local_rewrite(), Some(LocalRewrite::ReverseWheel));
+    assert!(
+        !r.drain_outputs()
+            .iter()
+            .any(|o| matches!(o, Output::Inject(InjectEvent::Scroll { .. })))
+    );
+    r.inject_scroll(
+        SOURCE,
+        SourceKind::Mouse,
+        0.,
+        3.,
+        ScrollAmount::Lines,
+        ScrollPhase::None,
+        None,
+    );
+    assert!(
+        r.drain_outputs()
+            .iter()
+            .any(|o| matches!(o,Output::Inject(InjectEvent::Scroll{dy,unit:ScrollUnit::Line,..})if *dy<0.))
+    );
+    let mut unknown = router(Os::Other);
+    let mut transform = InputTransform::default();
+    transform.linux.reverse_wheel = true;
+    unknown.set_input_transforms([(ME, transform)].into());
+    unknown.on_local_event(&event, 1);
+    assert_eq!(unknown.local_rewrite(), None);
+}
+#[test]
+fn linux_os_is_preserved_in_peer_parse_and_local_identity() {
+    assert_eq!(Os::parse("linux"), Os::Linux);
+    assert_eq!(Os::Linux.as_str(), "linux");
+    assert_eq!(Os::parse("future"), Os::Other);
+    #[cfg(target_os = "linux")]
+    assert_eq!(Os::current(), Os::Linux);
+}
+
+#[test]
+fn linux_caps_tap_hold_orders_ordinary_keys_in_the_same_injection_queue() {
+    use oink_foundation::input_transform::CapsTapHold;
+    let mut r = router(Os::Linux);
+    let mut s = InputTransform::default();
+    s.linux.keyboard = KeyboardMapping {
+        preset: KeyPreset::Custom,
+        caps_tap_hold: Some(CapsTapHold {
+            tap: KeyCode::LEFT_SHIFT,
+            hold: KeyCode::CAPS_LOCK,
+        }),
+        ..Default::default()
+    };
+    r.set_input_transforms([(ME, s)].into());
+    let a = KeyCode::keyboard(4);
+    for (code, pressed) in [
+        (KeyCode::CAPS_LOCK, true),
+        (a, true),
+        (KeyCode::CAPS_LOCK, false),
+        (a, false),
+    ] {
+        assert_eq!(physical(&mut r, code, pressed), Disposition::Swallow);
+    }
+    assert_eq!(
+        keys(&mut r),
+        vec![
+            (KeyCode::LEFT_SHIFT, true),
+            (a, true),
+            (KeyCode::LEFT_SHIFT, false),
+            (a, false)
+        ]
+    );
+    assert!(r.key_refs.is_empty());
+}

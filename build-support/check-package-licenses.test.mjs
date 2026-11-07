@@ -6,10 +6,10 @@ import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { auditPackage } from './check-package-licenses.mjs';
 
-for (const platform of ['macos-arm64','windows-x64']) test(`${platform}: package notices must match and new native assets fail`, () => {
+for (const platform of ['macos-arm64','windows-x64','linux-x64']) test(`${platform}: package notices must match and new native assets fail`, () => {
   const temp=mkdtempSync(join(tmpdir(),'oink-license-test-'));
   const root=join(temp,'source'), payload=join(temp,'payload');
-  const destination=platform==='macos-arm64'?join(payload,'Contents/Resources'):payload;
+  const destination=platform==='macos-arm64'?join(payload,'Contents/Resources'):platform==='linux-x64'?join(payload,'resources'):payload;
   const fullText='Copyright 2026 Synthetic Test Authors\nSynthetic test license text\n';
   const sha256=createHash('sha256').update(fullText).digest('hex');
   const files={

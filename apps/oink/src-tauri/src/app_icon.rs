@@ -25,7 +25,7 @@ struct Settings {
     mode: ThemeMode,
     accent: ThemeAccent,
     system_dark: bool,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     tray_presentation: oink_agent::tray::TrayPresentation,
 }
 
@@ -86,6 +86,27 @@ pub(crate) fn theme_changed(app: &AppHandle, theme: tauri::Theme) {
 }
 
 pub(crate) fn refresh(app: &AppHandle) {
+    #[cfg(target_os = "linux")]
+    {
+        match tray_image_linux(app) {
+            Ok(icon) => {
+                if let Some(tray) = app.tray_by_id("main") {
+                    let _ = tray.set_icon(Some(icon));
+                }
+            }
+            Err(error) => tracing::warn!(%error, "could not update Ubuntu icon"),
+        }
+        let appearance = app.state::<AppIcon>().settings.lock().unwrap().appearance();
+        if let Ok(pixels) = render(Artwork::Windows, appearance, 128) {
+            if let Ok(png) = pixels.encode_png() {
+                if let Ok(icon) = tauri::image::Image::from_bytes(&png) {
+                    for window in app.webview_windows().values() {
+                        let _ = window.set_icon(icon.clone());
+                    }
+                }
+            }
+        }
+    }
     #[cfg(target_os = "macos")]
     dock(app, false);
     #[cfg(windows)]
@@ -431,4 +452,13 @@ mod platform {
             }
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn tray_image_linux(app: &AppHandle) -> Result<tauri::image::Image<'static>, String> {
+    let state = app.state::<AppIcon>();
+    let settings = state.settings.lock().unwrap();
+    let pixels = crate::icon_render::render_tray(settings.tray_presentation.look, settings.appearance(), 32)?;
+    let png = pixels.encode_png().map_err(|e| e.to_string())?;
+    tauri::image::Image::from_bytes(&png).map_err(|e| e.to_string())
 }

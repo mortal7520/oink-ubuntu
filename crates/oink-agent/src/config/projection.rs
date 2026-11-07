@@ -204,6 +204,7 @@ pub(crate) fn transform(value: &input::InputTransform) -> RawValue {
     map([
         (1, target(&value.macos)),
         (2, target(&value.windows)),
+        (4, target(&value.linux)),
         (
             3,
             list(value.overrides.iter().map(|o| {
@@ -282,6 +283,7 @@ pub(crate) fn read_transform(value: dto::InputTransformValue) -> Result<input::I
     Ok(input::InputTransform {
         macos: read_target(value.macos()?)?,
         windows: read_target(value.windows()?)?,
+        linux: value.linux()?.map(read_target).transpose()?.unwrap_or_default(),
         overrides: value
             .overrides()?
             .0

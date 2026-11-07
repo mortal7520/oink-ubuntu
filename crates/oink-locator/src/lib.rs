@@ -13,10 +13,16 @@
 
 pub mod diagnostics;
 pub mod effect;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+mod linux_x11;
 pub mod notification;
 pub mod projection;
 pub mod raster;
 pub mod text;
+#[cfg(target_os = "linux")]
+use linux as platform;
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -585,7 +591,7 @@ fn over_pixel(dst: u32, src: u32) -> u32 {
 /// 每帧最长间隔：平台不知道刷新率时按 60 Hz。
 pub(crate) const DEFAULT_FRAME: Duration = Duration::from_micros(16_667);
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 mod platform {
     use super::*;
 
@@ -602,7 +608,7 @@ mod platform {
     pub(crate) struct Backend;
 
     impl Backend {
-        pub(crate) fn new() -> Option<Self> {
+        pub(crate) fn new(_health: Arc<diagnostics::Health>) -> Option<Self> {
             None
         }
         pub(crate) fn set_displays(&mut self, _: &[DisplayInfo]) {}

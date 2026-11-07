@@ -225,6 +225,7 @@ pub type SourceImageNudge = Arc<
 pub type SourceReturn = Arc<dyn Fn(DragOperation, Point, &dyn Fn(Point)) -> Result<(), String> + Send + Sync>;
 
 /// Callbacks owned by the input backend for one native source's transitions.
+#[derive(Clone)]
 pub struct SourceHoldInput {
     pub freeze: Arc<dyn Fn(DragOperation) -> Result<oink_foundation::dnd::DragAnchor, String> + Send + Sync>,
     pub relocate: Arc<dyn Fn(DragOperation, Point) -> Result<(), String> + Send + Sync>,
@@ -472,6 +473,8 @@ pub fn platform_dnd() -> Result<Box<dyn DndBackend>, ClipboardError> {
     return Ok(Box::new(crate::macos::dnd::MacDnd::new()));
     #[cfg(windows)]
     return crate::windows::dnd::backend();
+    #[cfg(target_os = "linux")]
+    return crate::linux::dnd::backend();
     #[allow(unreachable_code)]
     Err(ClipboardError::Unsupported)
 }

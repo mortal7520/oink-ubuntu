@@ -1,6 +1,7 @@
 import { tr } from '../i18n';
 import type { CSSProperties } from 'react';
-import { DropdownMenu, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, Row, Segmented, Switch } from 'oink-ui';
+import { DropdownMenu, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, Row, Segmented, Select, Switch } from 'oink-ui';
+import type { InputTargetOs } from '../api/types';
 import type { Platform } from '../window/DesktopWindow';
 import { KEY_NAMES, MAC_KEYS, WIN_KEYS, presetMap } from './prefs';
 import type { KeyMap, KeyPreset, PrefsApi } from './prefs';
@@ -21,10 +22,11 @@ const ROWS: Record<Platform, Cap[][]> = {
         [{ id: 'ctrl', u: 1.25 }, { id: 'win', u: 1 }, { id: 'alt', u: 1 }, { u: 3, ghost: '' }],
     ],
 };
-const targetName = (platform: Platform, t: string) => {
+const targetName = (platform: Platform, t: string, target: InputTargetOs = platform === 'mac' ? 'windows' : 'macos') => {
+    if (target === 'linux' && t === 'win') return 'Super';
     if (t === 'none') return tr('mapping|无');
-    const sided = { rightCtrl: tr('右 Ctrl'), rightAlt: tr('右 Alt'), rightShift: tr('右 Shift'), rightWin: tr('右 Win') };
-    return sided[t as keyof typeof sided] ?? KEY_NAMES[platform === 'mac' ? 'win' : 'mac'][t]?.name ?? t;
+    const sided = { rightCtrl: tr('右 Ctrl'), rightAlt: target==='macos'?tr('右 Alt').replace('Alt','Option'):tr('右 Alt'), rightShift: tr('右 Shift'), rightWin: target==='linux'?tr('右 Win').replace('Win','Super'):target==='macos'?tr('右 Win').replace('Win','Command'):tr('右 Win') };
+    return sided[t as keyof typeof sided] ?? KEY_NAMES[target === 'macos' ? 'mac' : 'win'][t]?.name ?? t;
 };
 export function KeyMapControl({ platform, api, capsIme, label, onLog }: {
     platform: Platform;
@@ -34,16 +36,22 @@ export function KeyMapControl({ platform, api, capsIme, label, onLog }: {
     onLog: (text: string) => void;
 }) {
     const { prefs, setPrefs } = api;
+    const target=api.keyTargetOs??(platform==='mac'?'windows':'macos');
+    const source=api.keySourceOs??(platform==='mac'?'macos':'windows');
+    const editable=target!=='linux'||api.linuxTransformSupported===true;
+    const sourceName=(key:string)=>source==='linux'&&key==='win'?'Super':KEY_NAMES[platform][key].name;
+    const mappedName=(key:string)=>targetName(platform,key,target);
     const preset = prefs.keyPreset;
     const custom = preset === 'custom';
     const split = platform === 'mac' && custom && prefs.capsSplit;
-    const map: KeyMap = custom ? prefs.keyCustom[platform] : presetMap(platform, preset, capsIme === true);
-    const targets = platform === 'mac' ? ['ctrl', 'win', 'alt', 'shift', 'caps'] : ['control', 'option', 'command', 'shift', 'caps'];
+    const map: KeyMap = custom ? prefs.keyCustom[platform] : presetMap(platform, preset, capsIme === true,target,source);
+    const targets = target !== 'macos' ? ['ctrl', 'win', 'alt', 'shift', 'caps'] : ['control', 'option', 'command', 'shift', 'caps'];
     const sources: string[] = platform === 'mac' ? [...MAC_KEYS, ...(custom && prefs.allowFnMapping ? ['fn'] : [])] : WIN_KEYS;
     const choosePreset = (v: KeyPreset) => {
+        if(!editable)return;
         setPrefs((p) => {
             if (v === 'custom' && !p.keyCustomTouched[platform] && p.keyPreset !== 'custom') {
-                const from = presetMap(platform, p.keyPreset, capsIme === true);
+                const from = presetMap(platform, p.keyPreset, capsIme === true,target,source);
                 return { ...p, keyPreset: v, keyCustom: { ...p.keyCustom, [platform]: from }, keyCustomTouched: { ...p.keyCustomTouched, [platform]: true }, capsSplit: platform === 'mac' ? !!from.capsLong : p.capsSplit };
             }
             return { ...p, keyPreset: v, keyCustomTouched: { ...p.keyCustomTouched, [platform]: p.keyCustomTouched[platform] || p.keyPreset === 'custom' } };
@@ -51,12 +59,13 @@ export function KeyMapControl({ platform, api, capsIme, label, onLog }: {
         onLog(tr('按键映射 → {0}', { mac: tr('Mac 手感'), win: tr('Windows 手感'), custom: tr('自定义') }[v]));
     };
     const setKey = (src: string, t: string, long = false) => {
+        if(!editable)return;
         setPrefs((p) => {
             const cur = p.keyCustom[platform];
             const next: KeyMap = long ? { ...cur, capsLong: t } : { ...cur, keys: { ...cur.keys, [src]: t } };
             return { ...p, keyCustom: { ...p.keyCustom, [platform]: next }, keyCustomTouched: { ...p.keyCustomTouched, [platform]: true } };
         });
-        onLog(tr('自定义映射：{0}{1} → {2}', KEY_NAMES[platform][src].name, long ? tr('（长按）') : split && src === 'caps' ? tr('（短按）') : '', targetName(platform, t)));
+        onLog(tr('自定义映射：{0}{1} → {2}', sourceName(src), long ? tr('（长按）') : split && src === 'caps' ? tr('（短按）') : '', mappedName(t)));
     };
     const setSplit = (on: boolean) => {
         setPrefs((p) => {
@@ -67,24 +76,24 @@ export function KeyMapControl({ platform, api, capsIme, label, onLog }: {
         onLog(tr('Caps Lock 短按 / 长按分开映射：{0}', on ? tr('开') : tr('关')));
     };
     const mapped = (src: string) => {
-        const short = targetName(platform, map.keys[src] ?? (src === 'fn' ? 'ctrl' : src));
-        const long = src === 'caps' && (custom ? split : !!map.capsLong) && map.capsLong ? targetName(platform, map.capsLong) : null;
+        const short = mappedName(map.keys[src] ?? (src === 'fn' ? 'ctrl' : src));
+        const long = src === 'caps' && (custom ? split : !!map.capsLong) && map.capsLong ? mappedName(map.capsLong) : null;
         return long ? `${short} / ${long}` : short;
     };
     const capFace = (src: string) => (<>
       <span className="kmap__to">{mapped(src)}</span>
       <span className="kmap__from">
-        <span>{KEY_NAMES[platform][src].name}</span>
+        <span>{sourceName(src)}</span>
         {KEY_NAMES[platform][src].sym && <span className="kmap__sym">{KEY_NAMES[platform][src].sym}</span>}
       </span>
     </>);
     const keyMenu = (src: string) => {
-        const name = KEY_NAMES[platform][src].name;
+        const name = sourceName(src);
         const group = (label: string, value: string | undefined, onChange: (v: string) => void) => (<MenuRadioGroup aria-label={label} value={value ?? null} onChange={onChange}>
         
-        {[...targets.filter(t => src !== 'fn' || t !== 'caps'), ...(src === 'fn' ? ['rightCtrl', 'rightAlt', 'rightShift', 'rightWin'] : []), 'none'].map((t) => <MenuRadioItem key={t} value={t} closeOnSelect={!(src === 'caps' && split)}>{targetName(platform, t)}</MenuRadioItem>)}
+        {[...targets.filter(t => src !== 'fn' || t !== 'caps'), ...(src === 'fn' ? ['rightCtrl', 'rightAlt', 'rightShift', 'rightWin'] : []), 'none'].map((t) => <MenuRadioItem key={t} value={t} closeOnSelect={!(src === 'caps' && split)}>{mappedName(t)}</MenuRadioItem>)}
       </MenuRadioGroup>);
-        return (<DropdownMenu key={src} matchTriggerWidth={false} trigger={<button type="button" className="kmap__key ok-focusable" data-key={src} aria-label={tr('{0}：映射为 {1}，点击修改', name, mapped(src))}>
+        return (<DropdownMenu key={src} matchTriggerWidth={false} trigger={<button type="button" className="kmap__key ok-focusable" disabled={!editable} data-key={src} aria-label={tr('{0}：映射为 {1}，点击修改', name, mapped(src))}>
             {capFace(src)}
           </button>}>
         {src === 'caps' && split ? (<>
@@ -100,7 +109,8 @@ export function KeyMapControl({ platform, api, capsIme, label, onLog }: {
         ? platform === 'mac' && preset === 'mac' && !capsIme ? tr('Caps Lock 跟随系统设置：按原样发送 Caps Lock') : null
         : tr('点按键修改它对应的键');
     return (<div className="kmap">
-      <Segmented<KeyPreset> size="sm" aria-label={tr('{0}：预设', label)} value={preset} onChange={choosePreset} options={[{ value: 'mac', get label() {
+      {api.setKeyTargetOs&&<Row label={tr('目标系统')}><Select size="sm" aria-label={tr('目标系统')} value={target} disabled={api.pending} onChange={v=>api.setKeyTargetOs?.(v as InputTargetOs)} options={[{value:'macos',label:'macOS'},{value:'windows',label:'Windows'},...(api.linuxTransformSupported?[{value:'linux',label:'Linux'}]:[])]}/></Row>}
+      <Segmented<KeyPreset> size="sm" disabled={!editable} aria-label={tr('{0}：预设', label)} value={preset} onChange={choosePreset} options={[{ value: 'mac', get label() {
                 return tr('Mac 手感');
             } }, { value: 'win', get label() {
                 return tr('Windows 手感');
@@ -117,7 +127,7 @@ export function KeyMapControl({ platform, api, capsIme, label, onLog }: {
                     return c.id === 'fn' ? <span key={i} className="kmap__key kmap__key--ghost" style={style} aria-hidden>fn</span> : null;
                 return custom
                     ? <span key={c.id} className="kmap__slot" style={style}>{keyMenu(c.id)}</span>
-                    : <span key={c.id} className="kmap__key" style={style} data-key={c.id} role="img" aria-label={tr('{0} 映射为 {1}', KEY_NAMES[platform][c.id].name, mapped(c.id))}>{capFace(c.id)}</span>;
+                    : <span key={c.id} className="kmap__key" style={style} data-key={c.id} role="img" aria-label={tr('{0} 映射为 {1}', sourceName(c.id), mapped(c.id))}>{capFace(c.id)}</span>;
             })}
           </div>))}
       </div>

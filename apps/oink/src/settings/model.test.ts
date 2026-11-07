@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { editTransform, readKeyboardMapping } from './model';
-import { DEFAULT_PREFS } from './prefs';
+import { editTransform, readKeyboardMapping, readTargetTransform } from './model';
+import { DEFAULT_PREFS, presetMap } from './prefs';
 import type { InputTransform } from '../api/types';
 describe('target-specific key mapping edits',()=>{
   it('retains hidden target OS values, full-table entries and per-device overrides',()=>{
@@ -123,5 +123,58 @@ describe('custom mapping independent of active preset',()=>{
     expect(decoded.map.capsLong).toBe('none');
     expect(decoded.allowFnMapping).toBe(false);
     expect(decoded.capsSplit).toBe(false);
+  });
+});
+
+
+describe('Linux target isolation and legacy owner compatibility',()=>{
+  const keyboard={preset:'custom' as const,table:[{from:0x700e4,to:0x700e6}]};
+  const current:InputTransform={macos:{reverse_wheel:false,keyboard},windows:{reverse_wheel:true,keyboard},overrides:[{target:'peer',reverse_wheel:true,keyboard}]};
+  it('defaults a missing Linux transform without adding it to legacy edits',()=>{
+    expect(readTargetTransform(current,'linux')).toEqual({reverse_wheel:false,keyboard:{preset:'none',table:[]}});
+    const edited=editTransform(current,'mac',DEFAULT_PREFS);
+    expect(edited.linux).toBeUndefined();
+    expect(edited.macos).toBe(current.macos);
+  });
+  it('writes the explicit Linux target and preserves both legacy targets and overrides',()=>{
+    const prefs={...DEFAULT_PREFS,keyPreset:'custom' as const,keyCustom:{...DEFAULT_PREFS.keyCustom,win:{keys:{ctrl:'win',win:'ctrl',alt:'none',shift:'shift',caps:'caps'}}}};
+    const edited=editTransform(current,'win',prefs,undefined,'linux',{linuxSupported:true});
+    expect(edited.macos).toBe(current.macos);
+    expect(edited.windows).toBe(current.windows);
+    expect(edited.overrides).toBe(current.overrides);
+    expect(edited.linux?.keyboard.table).toContainEqual({from:0x700e0,to:0x700e3});
+    expect(readKeyboardMapping(edited.linux!.keyboard,'win','linux').map.keys.ctrl).toBe('win');
+  });
+  it('rejects Linux edits for an owner without capability even if its DTO contains defaults',()=>{
+    expect(()=>editTransform({...current,linux:readTargetTransform(current,'linux')},'win',DEFAULT_PREFS,undefined,'linux',{linuxSupported:false})).toThrow('linux_transform_unsupported');
+  });
+  it('updates the source wheel for all three targets without changing any keyboard',()=>{
+    const stored={...current,linux:{reverse_wheel:false,keyboard}};
+    const edited=editTransform(stored,'win',DEFAULT_PREFS,true,'windows',{keyboard:false,linuxSupported:true,sourceOs:'linux'});
+    for(const target of ['macos','windows','linux'] as const){
+      expect(edited[target]!.reverse_wheel).toBe(true);
+      expect(edited[target]!.keyboard).toBe(stored[target].keyboard);
+    }
+    expect(edited.overrides[0]).toEqual({...current.overrides[0],reverse_wheel:null});
+  });
+  it('preserves Linux data while editing only legacy wheel fields on an old owner',()=>{
+    const linux={reverse_wheel:true,keyboard};
+    const edited=editTransform({...current,linux},'win',DEFAULT_PREFS,false,'macos',{keyboard:false,linuxSupported:false});
+    expect(edited.linux).toBe(linux);
+    expect(edited.macos.reverse_wheel).toBe(false);
+    expect(edited.windows.reverse_wheel).toBe(false);
+  });
+  it.each([
+    ['macos','macos','mac',{control:'control',option:'option',command:'command',shift:'shift',caps:'caps'}],
+    ['windows','windows','mac',{ctrl:'ctrl',win:'win',alt:'alt',shift:'shift',caps:'caps'}],
+    ['windows','linux','win',{ctrl:'ctrl',win:'win',alt:'alt',shift:'shift',caps:'caps'}],
+    ['windows','linux','mac',{ctrl:'win',win:'ctrl',alt:'alt',shift:'shift',caps:'caps'}],
+    ['linux','windows','mac',{ctrl:'win',win:'ctrl',alt:'alt',shift:'shift',caps:'caps'}],
+    ['linux','linux','win',{ctrl:'ctrl',win:'win',alt:'alt',shift:'shift',caps:'caps'}],
+    ['linux','macos','mac',{ctrl:'control',win:'option',alt:'command',shift:'shift',caps:'caps'}],
+    ['linux','macos','win',{ctrl:'command',win:'control',alt:'option',shift:'shift',caps:'caps'}],
+    ['macos','linux','win',{control:'ctrl',option:'win',command:'alt',shift:'shift',caps:'caps'}],
+  ] as const)('matches the backend preset for %s to %s (%s)',(source,target,preset,keys)=>{
+    expect(presetMap(source==='macos'?'mac':'win',preset,false,target,source).keys).toEqual(keys);
   });
 });

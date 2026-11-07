@@ -1,4 +1,14 @@
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
+        println!("cargo:rerun-if-changed=native/linux_pulse.c");
+        cc::Build::new()
+            .file("native/linux_pulse.c")
+            .flag("-std=c11")
+            .define("_POSIX_C_SOURCE", "200809L")
+            .warnings(true)
+            .compile("oink_audio_pulse");
+        println!("cargo:rustc-link-lib=pulse");
+    }
     println!("cargo:rerun-if-changed=native/pull_benchmark.c");
     println!("cargo:rerun-if-changed=native/microphone.m");
     println!("cargo:rerun-if-changed=native/realtime.c");

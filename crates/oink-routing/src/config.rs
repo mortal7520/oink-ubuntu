@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub enum Os {
     MacOS,
     Windows,
+    Linux,
     Other,
 }
 
@@ -19,6 +20,8 @@ impl Os {
             Os::MacOS
         } else if cfg!(windows) {
             Os::Windows
+        } else if cfg!(target_os = "linux") {
+            Os::Linux
         } else {
             Os::Other
         }
@@ -29,6 +32,7 @@ impl Os {
         match self {
             Os::MacOS => "macos",
             Os::Windows => "windows",
+            Os::Linux => "linux",
             Os::Other => "other",
         }
     }
@@ -37,6 +41,7 @@ impl Os {
         match s {
             "macos" => Os::MacOS,
             "windows" => Os::Windows,
+            "linux" => Os::Linux,
             _ => Os::Other,
         }
     }

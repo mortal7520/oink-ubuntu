@@ -102,7 +102,20 @@ fn detect_local_os_version() -> String {
     {
         "Windows".into()
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_to_string("/etc/os-release")
+            .ok()
+            .and_then(|text| {
+                text.lines().find_map(|line| {
+                    line.strip_prefix("PRETTY_NAME=")
+                        .map(|value| value.trim_matches('"').to_owned())
+                })
+            })
+            .filter(|value| !value.is_empty() && value.len() <= 256)
+            .unwrap_or_else(|| "Linux".into())
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         std::env::consts::OS.into()
     }
@@ -225,6 +238,14 @@ fn link_info(node: &Node, peer: DeviceId) -> Option<LinkInfo> {
         }),
     })
 }
+fn supports_linux_transform(facts: &dto::DeviceFacts) -> bool {
+    facts
+        .capabilities()
+        .ok()
+        .and_then(|c| c.supported().ok())
+        .is_some_and(|c| c.0.iter().any(|v| v.0 == crate::api::LINUX_TRANSFORM_CAPABILITY))
+}
+
 pub(crate) fn group_view(node: &Node) -> ApiResult<GroupView> {
     let group = node.link_config()?;
     let state = group.applied();
@@ -265,6 +286,8 @@ pub(crate) fn group_view(node: &Node) -> ApiResult<GroupView> {
                     state: peer_state(node, m.device),
                     reachable: m.is_self || m.online,
                     facts_fresh: facts.is_some(),
+                    linux_transform_supported: m.is_self
+                        || facts.as_ref().is_some_and(|facts| supports_linux_transform(facts)),
                     input_transform: m.is_self.then(|| {
                         InputTransform::from(node.settings().input_transform).with_local_exclusions(m.device, &m.os)
                     }),
@@ -1101,19 +1124,13 @@ impl AgentApi for Node {
         })
     }
     fn set_input_transform(&self, device: DeviceKey, settings: InputTransform) -> ApiResult<()> {
+        let supported = device.0 == self.id()
+            || self
+                .device_facts(device.0)
+                .as_ref()
+                .is_some_and(|facts| supports_linux_transform(facts));
         self.edit_device_option_with(device, dto::LocalOption::InputTransform, |current| {
-            let current = dto::InputTransformValue::read(&current).map_err(|error| ApiError::InvalidState {
-                message: error.to_string(),
-            })?;
-            let current = crate::config::read_transform(current).map_err(|error| ApiError::InvalidState {
-                message: error.to_string(),
-            })?;
-            // Diff known projections so omitted future fields stay owner-owned.
-            Ok(crate::config::owner::typed_patch(
-                dto::LocalOption::InputTransform,
-                &crate::config::write_transform(&current),
-                &crate::config::write_transform(&settings.into()),
-            ))
+            input_transform_patch(current, settings, supported)
         })
     }
     fn set_keyboard_disabled(&self, device: DeviceKey, disabled: bool) -> ApiResult<()> {
@@ -2193,5 +2210,83 @@ mod permission_tests {
             }
             node.shutdown().await;
         });
+    }
+}
+
+fn input_transform_patch(
+    current: oink_protocol::v1::RawValue,
+    settings: InputTransform,
+    supported: bool,
+) -> ApiResult<oink_protocol::v1::RawValue> {
+    let current = dto::InputTransformValue::read(&current).map_err(|error| ApiError::InvalidState {
+        message: error.to_string(),
+    })?;
+    let current = crate::config::read_transform(current).map_err(|error| ApiError::InvalidState {
+        message: error.to_string(),
+    })?;
+    let linux_supplied = settings.linux.is_some();
+    let mut next: oink_foundation::input_transform::InputTransform = settings.into();
+    if !linux_supplied {
+        next.linux = current.linux.clone();
+    }
+    if !supported && next.linux != current.linux {
+        return Err(ApiError::Unsupported { message: "This device owner does not support Linux target input settings; update that owner before editing this target".into() });
+    }
+    // Diff known projections so omitted future fields stay owner-owned.
+    Ok(crate::config::owner::typed_patch(
+        dto::LocalOption::InputTransform,
+        &crate::config::write_transform(&current),
+        &crate::config::write_transform(&next),
+    ))
+}
+
+#[cfg(test)]
+mod linux_transform_api_tests {
+    use super::*;
+    use oink_foundation::input_transform::{InputTransform as RuntimeTransform, TargetTransform};
+    #[test]
+    fn linux_edit_is_capability_gated_but_legacy_platform_edits_remain_narrow() {
+        let current = RuntimeTransform::default();
+        let mut next = current.clone();
+        next.macos.reverse_wheel = true;
+        let patch =
+            input_transform_patch(crate::config::write_transform(&current), next.clone().into(), false).unwrap();
+        assert_eq!(patch.as_map().unwrap().keys().copied().collect::<Vec<_>>(), vec![1]);
+        next.linux.reverse_wheel = true;
+        assert!(matches!(
+            input_transform_patch(crate::config::write_transform(&current), next.clone().into(), false),
+            Err(ApiError::Unsupported { .. })
+        ));
+        assert!(
+            input_transform_patch(crate::config::write_transform(&current), next.into(), true)
+                .unwrap()
+                .as_map()
+                .unwrap()
+                .contains_key(&4)
+        );
+    }
+    #[test]
+    fn old_client_omission_preserves_new_linux_settings_and_key_support_is_real() {
+        let mut current = RuntimeTransform::default();
+        current.linux = TargetTransform {
+            reverse_wheel: true,
+            ..Default::default()
+        };
+        let mut json = serde_json::to_value(InputTransform::from(current.clone())).unwrap();
+        json.as_object_mut().unwrap().remove("linux");
+        json["windows"]["reverse_wheel"] = serde_json::json!(true);
+        let old: InputTransform = serde_json::from_value(json).unwrap();
+        assert!(old.linux.is_none());
+        let patch = input_transform_patch(crate::config::write_transform(&current), old, true).unwrap();
+        assert_eq!(patch.as_map().unwrap().keys().copied().collect::<Vec<_>>(), vec![2]);
+        let support = KeySupport::default();
+        assert!(!support.linux.is_empty());
+        assert!(!support.linux.contains(&oink_foundation::input::KeyCode::APPLE_FN));
+    }
+    #[test]
+    fn linux_capability_is_optional_for_legacy_pairing() {
+        let p = Node::offer_profile();
+        assert!(p.capabilities.iter().any(|c| c == LINUX_TRANSFORM_CAPABILITY));
+        assert!(!p.required_capabilities.iter().any(|c| c == LINUX_TRANSFORM_CAPABILITY));
     }
 }

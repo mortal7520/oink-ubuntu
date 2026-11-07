@@ -118,7 +118,7 @@ pub(super) fn progress(step: MicrophonePluginStep) {
 pub(super) fn status() -> MicrophonePluginStatus {
     cache().snapshot()
 }
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(super) fn virtual_output() -> Option<String> {
     cache()
         .state

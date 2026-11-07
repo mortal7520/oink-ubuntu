@@ -52,13 +52,21 @@ impl KeyboardMapping {
     pub fn preset(preset: KeyPreset, source_os: &str, target_os: &str) -> Self {
         use KeyCode as K;
         let pairs: &[(KeyCode, KeyCode)] = match (preset, source_os, target_os) {
-            (KeyPreset::MacFeel, "macos", "windows") | (KeyPreset::MacFeel, "windows", "macos") => &[
+            (KeyPreset::MacFeel, "macos", "linux")
+            | (KeyPreset::MacFeel, "windows", "linux")
+            | (KeyPreset::MacFeel, "linux", "windows" | "linux")
+            | (KeyPreset::WinFeel, "linux", "macos")
+            | (KeyPreset::MacFeel, "macos", "windows")
+            | (KeyPreset::MacFeel, "windows", "macos") => &[
                 (K::LEFT_CTRL, K::LEFT_GUI),
                 (K::LEFT_GUI, K::LEFT_CTRL),
                 (K::RIGHT_CTRL, K::RIGHT_GUI),
                 (K::RIGHT_GUI, K::RIGHT_CTRL),
             ],
-            (KeyPreset::WinFeel, "macos", "windows") | (KeyPreset::WinFeel, "windows", "macos") => &[
+            (KeyPreset::WinFeel, "macos", "linux")
+            | (KeyPreset::MacFeel, "linux", "macos")
+            | (KeyPreset::WinFeel, "macos", "windows")
+            | (KeyPreset::WinFeel, "windows", "macos") => &[
                 (K::LEFT_ALT, K::LEFT_GUI),
                 (K::LEFT_GUI, K::LEFT_ALT),
                 (K::RIGHT_ALT, K::RIGHT_GUI),
@@ -76,7 +84,9 @@ impl KeyboardMapping {
     pub fn caps_tap_hold(&self, source_os: &str, target_os: &str, mac_caps_switch: bool) -> Option<CapsTapHold> {
         match self.preset {
             KeyPreset::Custom => self.caps_tap_hold,
-            KeyPreset::MacFeel if source_os == "macos" && target_os == "windows" && mac_caps_switch => {
+            KeyPreset::MacFeel
+                if source_os == "macos" && matches!(target_os, "windows" | "linux") && mac_caps_switch =>
+            {
                 Some(CapsTapHold {
                     tap: KeyCode::LEFT_SHIFT,
                     hold: KeyCode::CAPS_LOCK,
@@ -153,6 +163,7 @@ pub struct TargetOverride {
 pub struct InputTransform {
     pub macos: TargetTransform,
     pub windows: TargetTransform,
+    pub linux: TargetTransform,
     pub overrides: Vec<TargetOverride>,
 }
 impl InputTransform {
@@ -160,8 +171,9 @@ impl InputTransform {
         let mut value = Self::default();
         if source_os == "macos" {
             value.windows.keyboard = KeyboardMapping::preset(KeyPreset::MacFeel, source_os, "windows");
+            value.linux.keyboard = KeyboardMapping::preset(KeyPreset::MacFeel, source_os, "linux");
         }
-        if source_os == "windows" {
+        if matches!(source_os, "windows" | "linux") {
             value.macos.keyboard = KeyboardMapping::preset(KeyPreset::MacFeel, source_os, "macos");
         }
         value
@@ -170,6 +182,7 @@ impl InputTransform {
         let mut value = match target_os {
             "macos" => self.macos.clone(),
             "windows" => self.windows.clone(),
+            "linux" => self.linux.clone(),
             _ => TargetTransform::default(),
         };
         if let Some(o) = self.overrides.iter().find(|o| o.target == target) {
@@ -185,6 +198,7 @@ impl InputTransform {
     pub fn validate(&self) -> Result<(), String> {
         self.macos.keyboard.validate()?;
         self.windows.keyboard.validate()?;
+        self.linux.keyboard.validate()?;
         if self.overrides.len() > 16 {
             return Err("目标设备覆盖最多 16 项".into());
         }
@@ -426,5 +440,70 @@ mod empty_mapping_tests {
         assert_eq!(serde_json::from_str::<InputTransform>(&json).unwrap(), transform);
         transform.windows.keyboard.table[0].from = KeyCode::NONE;
         assert!(transform.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod linux_tests {
+    use super::*;
+    #[test]
+    fn legacy_json_preserves_existing_platforms_and_defaults_linux() {
+        let old = serde_json::json!({"macos":{"reverse_wheel":true},"windows":{"keyboard":{"preset":"custom","table":[{"from":KeyCode::LEFT_CTRL,"to":KeyCode::LEFT_ALT}]}},"overrides":[]});
+        let v: InputTransform = serde_json::from_value(old).unwrap();
+        assert!(v.macos.reverse_wheel);
+        assert_eq!(v.windows.keyboard.map(KeyCode::LEFT_CTRL), KeyCode::LEFT_ALT);
+        assert_eq!(v.linux, TargetTransform::default());
+    }
+    #[test]
+    fn linux_is_explicit_and_unknown_os_never_uses_its_settings() {
+        let mut v = InputTransform::default();
+        v.linux.reverse_wheel = true;
+        v.linux.keyboard = KeyboardMapping::preset(KeyPreset::MacFeel, "linux", "linux");
+        let id = DeviceId([9; 32]);
+        assert_eq!(
+            v.resolve(id, "linux").keyboard.map(KeyCode::LEFT_CTRL),
+            KeyCode::LEFT_GUI
+        );
+        assert!(v.resolve(id, "linux").reverse_wheel);
+        assert_eq!(v.resolve(id, "other"), TargetTransform::default());
+        assert_eq!(v.resolve(id, "future-os"), TargetTransform::default());
+    }
+    #[test]
+    fn linux_preset_matrix_does_not_change_released_mac_windows_defaults() {
+        for (source, target) in [("windows", "linux"), ("linux", "windows"), ("linux", "linux")] {
+            let mac = KeyboardMapping::preset(KeyPreset::MacFeel, source, target);
+            assert_eq!(mac.map(KeyCode::LEFT_CTRL), KeyCode::LEFT_GUI);
+            assert_eq!(mac.map(KeyCode::RIGHT_GUI), KeyCode::RIGHT_CTRL);
+            let win = KeyboardMapping::preset(KeyPreset::WinFeel, source, target);
+            assert!(win.table.is_empty());
+        }
+        for target in ["windows", "linux"] {
+            assert_eq!(
+                KeyboardMapping::preset(KeyPreset::MacFeel, "macos", target).map(KeyCode::LEFT_GUI),
+                KeyCode::LEFT_CTRL
+            );
+            assert_eq!(
+                KeyboardMapping::preset(KeyPreset::WinFeel, "macos", target).map(KeyCode::LEFT_ALT),
+                KeyCode::LEFT_GUI
+            );
+        }
+        assert_eq!(
+            KeyboardMapping::preset(KeyPreset::MacFeel, "linux", "macos").map(KeyCode::LEFT_ALT),
+            KeyCode::LEFT_GUI
+        );
+        assert_eq!(
+            KeyboardMapping::preset(KeyPreset::WinFeel, "linux", "macos").map(KeyCode::LEFT_CTRL),
+            KeyCode::LEFT_GUI
+        );
+        for os in ["macos", "windows"] {
+            for preset in [KeyPreset::MacFeel, KeyPreset::WinFeel] {
+                assert!(KeyboardMapping::preset(preset, os, os).table.is_empty());
+            }
+        }
+        assert!(
+            KeyboardMapping::preset(KeyPreset::MacFeel, "unknown", "linux")
+                .table
+                .is_empty()
+        );
     }
 }

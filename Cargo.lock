@@ -1541,6 +1541,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gethostname"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
+dependencies = [
+ "rustix 1.1.5",
+ "windows-link",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3260,9 +3270,12 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "unicode-normalization",
+ "url",
  "windows",
  "windows-core",
  "windows-sys 0.61.2",
+ "x11rb",
 ]
 
 [[package]]
@@ -3301,6 +3314,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "windows",
+ "x11rb",
 ]
 
 [[package]]
@@ -3337,12 +3351,14 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "windows",
+ "x11rb",
 ]
 
 [[package]]
 name = "oink-locator"
 version = "0.3.3"
 dependencies = [
+ "cc",
  "libc",
  "objc2",
  "objc2-app-kit",
@@ -3353,6 +3369,7 @@ dependencies = [
  "oink-display",
  "oink-foundation",
  "oink-routing",
+ "pkg-config",
  "tracing",
  "tracing-subscriber",
  "windows",
@@ -3370,7 +3387,7 @@ dependencies = [
  "crossbeam-queue",
  "ed25519-dalek",
  "fs2",
- "gethostname",
+ "gethostname 0.5.0",
  "hkdf",
  "hmac",
  "if-addrs 0.13.4",
@@ -5931,6 +5948,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
 
 [[package]]
+name = "unicode-normalization"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6806,6 +6832,23 @@ dependencies = [
  "once_cell",
  "pkg-config",
 ]
+
+[[package]]
+name = "x11rb"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9993aa5be5a26815fe2c3eacfc1fde061fc1a1f094bf1ad2a18bf9c495dd7414"
+dependencies = [
+ "gethostname 1.1.0",
+ "rustix 1.1.5",
+ "x11rb-protocol",
+]
+
+[[package]]
+name = "x11rb-protocol"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "x509-cert"

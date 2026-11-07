@@ -2,6 +2,10 @@
 //! Capture never changes endpoint volume or default devices; source mute uses a
 //! durable restoration journal. Explicit exit controls target one exact output.
 mod capture_permission;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::{Capture, endpoint_state, recover};
 pub mod claims;
 #[cfg(any(target_os = "macos", test))]
 mod endpoint_mute;
@@ -64,7 +68,7 @@ pub use negotiation::Profile as StreamFormat;
 /// DeviceDesc (e.g. `Speakers`) in name(), and Device_FriendlyName
 /// (`Speakers (USB Audio)`) in the first extended line. Keep that full
 /// name for speaker output enumeration.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(crate) fn device_name(description: &cpal::DeviceDescription) -> &str {
     #[cfg(windows)]
     if let Some(friendly) = description.extended().first() {
@@ -255,14 +259,16 @@ pub fn capture_capability() -> &'static str {
         "core_audio_tap_14_2"
     } else if cfg!(windows) {
         "wasapi_endpoint_loopback_journaled_mute_driver_dependent"
+    } else if cfg!(target_os = "linux") {
+        "pulseaudio_monitor_private_routing_bus"
     } else {
         "unsupported"
     }
 }
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 #[derive(Debug)]
 pub struct Capture;
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 impl Capture {
     pub fn info(&self) -> CaptureInfo {
         CaptureInfo::default()
@@ -405,11 +411,16 @@ pub mod pull_test_support;
 
 /// Read the source endpoint format without opening a capture or playback stream.
 pub fn capture_sample_rate() -> Result<u32, String> {
-    use cpal::traits::{DeviceTrait, HostTrait};
-    cpal::default_host()
-        .default_output_device()
-        .ok_or("no default audio output")?
-        .default_output_config()
-        .map(|config| config.sample_rate())
-        .map_err(|error| error.to_string())
+    #[cfg(target_os = "linux")]
+    return linux::capture_sample_rate();
+    #[cfg(not(target_os = "linux"))]
+    {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        cpal::default_host()
+            .default_output_device()
+            .ok_or("no default audio output")?
+            .default_output_config()
+            .map(|config| config.sample_rate())
+            .map_err(|error| error.to_string())
+    }
 }

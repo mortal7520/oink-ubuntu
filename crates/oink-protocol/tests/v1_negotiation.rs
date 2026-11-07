@@ -631,3 +631,21 @@ fn local_click_requires_its_own_optional_capability() {
     }
     assert!(!registry::BASELINE.contains(&"oink.focus.local-click/1"));
 }
+
+#[test]
+fn linux_transform_is_optional_for_unmodified_033_peer_and_known_for_new_peers() {
+    let cap = "oink.input.linux-transform/1";
+    let (mut new, mut old) = offers();
+    for o in [&mut new, &mut old] {
+        add_cap(o, "oink.pairing/1", 4);
+    }
+    add_cap(&mut new, cap, 4);
+    let legacy: Vec<_> = registry::CAPABILITIES.iter().copied().filter(|id| *id != cap).collect();
+    let selected = admission::negotiate(&bytes(new.clone()), &bytes(old.clone()), &legacy, true).unwrap();
+    assert!(!selected.enabled().unwrap().0.iter().any(|id| id.0 == cap));
+    assert!(selected.pairing_suite().unwrap().is_some());
+    add_cap(&mut old, cap, 4);
+    let selected = admission::negotiate(&bytes(new), &bytes(old), registry::CAPABILITIES, true).unwrap();
+    assert!(selected.enabled().unwrap().0.iter().any(|id| id.0 == cap));
+    assert!(admission::Agreement::new(selected.enabled().unwrap().0.into_iter().map(|id| id.0)).is_ok());
+}

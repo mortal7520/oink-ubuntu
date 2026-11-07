@@ -1,6 +1,6 @@
 [package]
 name = "oink-locator"
-description = "屏幕覆盖层：光标定位拖尾（快速画圈时在光标后面绘制）与布局预览、通知（macOS / Windows）"
+description = "屏幕覆盖层：光标定位拖尾（快速画圈时在光标后面绘制）与布局预览、通知（macOS / Windows / Linux X11）"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -65,3 +65,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 
 [lints]
 workspace = true
+
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"

@@ -1,6 +1,6 @@
 [package]
 name = "oink-autostart"
-description = "登录时自动启动：系统登录项的查询、注册与注销（macOS SMAppService、Windows 的 Run 注册表项），以及「本次是否由登录项启动」的判断"
+description = "登录时自动启动：系统登录项的查询、注册与注销（macOS SMAppService、Windows 的 Run 注册表项、Linux XDG .desktop），以及「本次是否由登录项启动」的判断"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

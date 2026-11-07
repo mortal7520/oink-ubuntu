@@ -73,6 +73,12 @@ windows = { version = "0.62", features = [
     "Win32_UI_HiDpi",
 ] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+x11rb = { version = "0.13", features = ["xfixes", "xtest"] }
+url = "2"
+unicode-normalization = "0.1"
+
 [dev-dependencies]
 # Match other integration crates: scanner-held atomic publication may outlast
 # the product deadline under concurrent tests; release behavior stays unchanged.

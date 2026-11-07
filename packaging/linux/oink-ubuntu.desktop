@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Oink Ubuntu (modified)
+Name[zh_CN]=Oink Ubuntu（Linux 适配版）
+Comment=Share input, clipboard and audio with paired computers
+Exec=/usr/bin/oink-ubuntu
+Icon=oink-ubuntu
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+StartupWMClass=oink

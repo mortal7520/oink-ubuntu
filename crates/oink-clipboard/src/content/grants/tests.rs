@@ -4,6 +4,37 @@ use crate::model::NodeKind;
 use namespace::Local;
 const PEER: DeviceId = DeviceId([1; 32]);
 
+#[cfg(target_os = "linux")]
+#[test]
+fn concurrent_rename_after_resolve_cannot_refresh_a_child_to_its_replacement() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("root");
+    fs::create_dir(&root).unwrap();
+    let original = root.join("child");
+    fs::write(&original, b"original selected data").unwrap();
+    let source = Local::new(vec![(NodeId(1), root.clone())]).unwrap();
+    let store = SourceGrants::load(&directory.path().join("journal"), [(PEER, [1; 32])]).unwrap();
+    let token = store.issue(PEER, source.as_ref(), &[NodeId(1)]).unwrap();
+    let namespace = store.open(PEER, token).unwrap();
+    let child = namespace.list(NodeId(1), None).unwrap().entries.remove(0);
+    let (entered, resume, _pause) = location::test_pause::install(original.clone());
+    let selecting = namespace.clone();
+    let worker = std::thread::spawn(move || selecting.select(child.id));
+    entered.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+    fs::rename(&original, directory.path().join("moved-outside-root")).unwrap();
+    fs::write(&original, b"replacement must never become the selected identity").unwrap();
+    resume.send(()).unwrap();
+    assert!(
+        worker.join().unwrap().is_err(),
+        "path metadata was refreshed to an object without Gone evidence"
+    );
+    assert_eq!(
+        crate::content::reason(&namespace.select(child.id).unwrap_err()),
+        Unavailable::Permission
+    );
+    assert!(namespace.open(child.id, child.version, 0).is_err());
+}
+
 pub(super) struct OneShot(pub(super) Arc<Local>);
 impl Namespace for OneShot {
     fn one_shot_roots(&self) -> Vec<NodeId> {

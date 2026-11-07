@@ -319,7 +319,9 @@ impl OwnerStore {
         let mut candidate = self.clone();
         candidate.raw.insert(4, RawValue::Bytes(group.0.to_vec()));
         for option in [LocalOption::AudioExitClaim, LocalOption::MicrophoneShareClaim] {
-            let Some(item) = candidate.item(option) else { continue };
+            let Some(item) = candidate.item(option) else {
+                continue;
+            };
             let revision = item.revision()?.checked_add(1).ok_or(StoreError::LimitExceeded)?;
             let mut claims = candidate.claims_for(group, option);
             let claim = claims
@@ -357,7 +359,9 @@ impl OwnerStore {
         let mut candidate = self.clone();
         candidate.switch_group(group, owner)?;
         for option in [LocalOption::AudioExitClaim, LocalOption::MicrophoneShareClaim] {
-            let Some(item) = self.item(option) else { continue };
+            let Some(item) = self.item(option) else {
+                continue;
+            };
             let claim = Option::<dto::AudioExitClaim>::read(&item.value()?)?;
             if !claim.is_some_and(|c| c.claimed() == Ok(true)) {
                 continue;
@@ -611,7 +615,9 @@ pub fn validate_value(option: LocalOption, value: &RawValue) -> Result<(), Contr
             }
         }
         DeviceName => {
-            let RawValue::Text(name) = value else { return Err(bad) };
+            let RawValue::Text(name) = value else {
+                return Err(bad);
+            };
             if name.is_empty() || name.len() > 256 {
                 return Err(bad);
             }
@@ -631,6 +637,9 @@ pub fn validate_value(option: LocalOption, value: &RawValue) -> Result<(), Contr
                 transform.macos().map_err(invalid)?,
                 transform.windows().map_err(invalid)?,
             ] {
+                validate_keyboard(&target.keyboard().map_err(invalid)?)?;
+            }
+            if let Some(target) = transform.linux().map_err(invalid)? {
                 validate_keyboard(&target.keyboard().map_err(invalid)?)?;
             }
             let mut seen = BTreeSet::new();
@@ -750,7 +759,7 @@ fn patch_map(current: &mut RawValue, patch: &RawValue, shape: Shape) -> Result<(
         use Shape::*;
         let child = match (shape, key) {
             (ScreenPreferences, 1) => Some((Screen, true)),
-            (Transform, 1 | 2) => Some((Target, false)),
+            (Transform, 1 | 2 | 4) => Some((Target, false)),
             (Transform, 3) => Some((Override, true)),
             (Target, 2) | (Override, 3) => Some((Keyboard, false)),
             (Keyboard, 2) => Some((Key, true)),
@@ -762,7 +771,8 @@ fn patch_map(current: &mut RawValue, patch: &RawValue, shape: Shape) -> Result<(
         let valid = match shape {
             ScreenPreferences | Target | Key | Caps | Forwarding => key <= 2,
             Screen | Keyboard | SavedCustom => key <= 4,
-            Transform | Override => key <= 3,
+            Transform => key <= 4,
+            Override => key <= 3,
             Policy => key <= 6,
         };
         if key == 0 || !valid {
@@ -777,6 +787,12 @@ fn patch_map(current: &mut RawValue, patch: &RawValue, shape: Shape) -> Result<(
                 current.remove(&key);
             }
             continue;
+        }
+        if matches!(shape, Transform) && key == 4 && !current.contains_key(&key) {
+            // Old owner stores lack the optional Linux tree. Seed the default
+            // before applying a narrow edit so untouched required fields exist.
+            let defaults = super::write_transform(&oink_foundation::input_transform::InputTransform::default());
+            current.insert(key, defaults.as_map().map_err(invalid)?[&4].clone());
         }
         if let Some((shape, list)) = child {
             let entry = current.entry(key).or_insert_with(|| {
@@ -895,7 +911,7 @@ fn diff_map(before: &RawValue, after: &RawValue, shape: Shape) -> RawValue {
         use Shape::*;
         let child = match (shape, key) {
             (ScreenPreferences, 1) => Some((Screen, true)),
-            (Transform, 1 | 2) => Some((Target, false)),
+            (Transform, 1 | 2 | 4) => Some((Target, false)),
             (Transform, 3) => Some((Override, true)),
             (Target, 2) | (Override, 3) => Some((Keyboard, false)),
             (Keyboard, 2) => Some((Key, true)),
@@ -1516,5 +1532,41 @@ mod tests {
         };
         assert!(validate_keyboard(&mapping(0xff0003, 0)).is_ok());
         assert!(validate_keyboard(&mapping(0, 0x700e0)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod linux_transform_tests {
+    use super::*;
+    #[test]
+    fn old_store_adds_linux_by_narrow_patch_without_resetting_other_platforms_or_unknowns() {
+        let mut owner = OwnerStore::new([(
+            LocalOption::InputTransform,
+            crate::config::write_transform(&Default::default()),
+        )])
+        .unwrap();
+        let option = LocalOption::InputTransform;
+        let revision = owner.revision(option).unwrap();
+        let mut old = owner.value(option).unwrap();
+        let RawValue::Map(raw) = &mut old else { panic!() };
+        raw.remove(&4);
+        raw.insert(900, RawValue::Text("future".into()));
+        owner.replace_value(option, revision, old.clone()).unwrap();
+        let current = super::super::read_transform(dto::InputTransformValue::read(&old).unwrap()).unwrap();
+        let mut next = current.clone();
+        next.linux.reverse_wheel = true;
+        let patch = typed_patch(
+            option,
+            &super::super::write_transform(&current),
+            &super::super::write_transform(&next),
+        );
+        assert_eq!(patch.as_map().unwrap().keys().copied().collect::<Vec<_>>(), vec![4]);
+        owner.edit(option, owner.revision(option).unwrap(), patch).unwrap();
+        let saved = owner.value(option).unwrap();
+        assert_eq!(saved.as_map().unwrap()[&900], RawValue::Text("future".into()));
+        let projected = super::super::read_transform(dto::InputTransformValue::read(&saved).unwrap()).unwrap();
+        assert!(projected.linux.reverse_wheel);
+        assert_eq!(projected.macos, current.macos);
+        assert_eq!(projected.windows, current.windows);
     }
 }

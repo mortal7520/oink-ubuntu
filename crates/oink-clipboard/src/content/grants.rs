@@ -1052,6 +1052,11 @@ fn resolve(grant: &Grant, id: NodeId) -> io::Result<(PathBuf, local::Fingerprint
         Some(guard) => guard.target().to_path_buf(),
         None => root.location.resolve()?,
     };
+    #[cfg(target_os = "linux")]
+    if node.location.followed.is_empty() {
+        root.location
+            .validate_resolved(&root_path, &local::inspect(&root_path)?)?;
+    }
     if path != root_path
         && (!path.starts_with(&root_path)
             || (node.location.followed.is_empty() && !root.location.fingerprint.directory))
@@ -1067,7 +1072,10 @@ fn resolve(grant: &Grant, id: NodeId) -> io::Result<(PathBuf, local::Fingerprint
         }
         cursor = cursor.parent().ok_or_else(|| unavailable(Unavailable::Permission))?;
     }
+    #[cfg(all(test, target_os = "linux"))]
+    location::test_pause::run(&path);
     let fingerprint = local::inspect(&path)?;
+    node.location.validate_resolved(&path, &fingerprint)?;
     Ok((path, fingerprint))
 }
 impl Namespace for Context {

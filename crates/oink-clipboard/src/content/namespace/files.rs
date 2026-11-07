@@ -280,7 +280,11 @@ impl Names {
             let base = sanitize_component(&node.name, self.target);
             let mut name = base.clone();
             let mut number = 1;
-            while !used.insert(name.to_lowercase()) {
+            while !used.insert(if self.target == TargetOs::Other {
+                name.clone()
+            } else {
+                name.to_lowercase()
+            }) {
                 number += 1;
                 name = crate::sync::files::names::with_suffix(&base, number, self.target);
             }

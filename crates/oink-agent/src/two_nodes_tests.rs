@@ -557,12 +557,51 @@ async fn pair_route_clipboard_layout_disconnect_scenario() {
     // A few large format identities cross the same manifest boundary without
     // turning this routing scenario into hundreds of sequential payload reads.
     let many: Vec<_> = (0..8)
-        .map(|i| ClipData::Custom {
-            platform,
-            name: format!("org.oink.test.manifest.{}.{i}", "x".repeat(3000)),
-            bytes: format!("item-{i}").into_bytes(),
+        .map(|i| {
+            let name = format!("org.oink.test.manifest.{}.{i}", "x".repeat(3000));
+            #[cfg(target_os = "linux")]
+            {
+                use oink_clipboard::model::{
+                    ContentItem, ItemId, Medium, NativeFormat, Representation, RepresentationData, RepresentationId,
+                    StandardFormat,
+                };
+                // The synthetic source models Windows metadata; Linux must not
+                // reconstruct opaque Windows names. Keep those long identities
+                // for the Low manifest boundary, but carry actual portable RTF
+                // representations (the native Linux contract is text/rtf).
+                let payload = format!("{{\\rtf1\\ansi item-{i}}}").into_bytes();
+                ClipData::Native {
+                    platform: oink_foundation::clipboard::ClipPlatform::Windows,
+                    item: ContentItem {
+                        id: ItemId(i + 1),
+                        virtual_files: false,
+                        file: None,
+                        representations: vec![Representation {
+                            id: RepresentationId(i + 1),
+                            format: NativeFormat::WindowsRegistered(name),
+                            medium: Medium::Bytes,
+                            aspect: 1,
+                            index: -1,
+                            standard: Some(StandardFormat::Rtf),
+                            data: RepresentationData::Inline(payload),
+                        }],
+                    },
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            ClipData::Custom {
+                platform,
+                name,
+                bytes: format!("item-{i}").into_bytes(),
+            }
         })
         .collect();
+    #[cfg(target_os = "linux")]
+    let expected_many: Vec<_> = (0..8)
+        .map(|i| ClipData::Rtf(format!("{{\\rtf1\\ansi item-{i}}}").into_bytes()))
+        .collect();
+    #[cfg(not(target_os = "linux"))]
+    let expected_many = many.clone();
     a.clip.copy(many.clone(), Sensitivity::Normal);
     {
         use oink_clipboard::ClipboardBackend;
@@ -571,7 +610,7 @@ async fn pair_route_clipboard_layout_disconnect_scenario() {
         let wire = oink_clipboard::wire::inventory(&inventory).unwrap();
         assert!(wire.encode(limits::INVENTORY).unwrap().len() > limits::RELIABLE_FRAME);
     }
-    wait_for("large offer manifest on B", 10.0, || bc.items() == many).await;
+    wait_for("large offer manifest on B", 10.0, || bc.items() == expected_many).await;
 
     // ---- Native file admission and authority across real node connections.
     // This backend has no OS received store and must refuse file publication.
@@ -597,7 +636,11 @@ async fn pair_route_clipboard_layout_disconnect_scenario() {
         })
     })
     .await;
-    assert_eq!(bc.items(), many, "failed publication must preserve the prior clipboard");
+    assert_eq!(
+        bc.items(),
+        expected_many,
+        "failed publication must preserve the prior clipboard"
+    );
     assert!(!bn.data_dir().join("completed-deliveries").exists());
     assert_eq!(std::fs::read(&source).unwrap(), bytes);
 

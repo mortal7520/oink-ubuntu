@@ -2,7 +2,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=OINK_RELEASE_VERSION");
     println!("cargo:rerun-if-env-changed=OINK_RELEASE_BUILD");
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os != "macos" && target_os != "windows" {
+    if target_os != "macos" && target_os != "windows" && target_os != "linux" {
         return;
     }
     if target_os == "macos" {
@@ -10,7 +10,7 @@ fn main() {
         // in the outer app's Frameworks directory, shared with the backend.
         println!("cargo:rustc-link-arg-bin=oink=-Wl,-rpath,@executable_path/../../../../Frameworks");
     }
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
     if target_os == "windows" {
         #[cfg(windows)]
         {

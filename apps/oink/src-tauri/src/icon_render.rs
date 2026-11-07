@@ -21,7 +21,7 @@ impl Appearance {
 pub(crate) enum Artwork {
     #[cfg(any(target_os = "macos", test))]
     Mac,
-    #[cfg(any(windows, test))]
+    #[cfg(any(windows, target_os = "linux", test))]
     Windows,
 }
 
@@ -29,7 +29,7 @@ pub(crate) fn render(artwork: Artwork, appearance: Appearance, size: u32) -> Res
     let source = match artwork {
         #[cfg(any(target_os = "macos", test))]
         Artwork::Mac => include_str!("../icons/appicon-macos.svg"),
-        #[cfg(any(windows, test))]
+        #[cfg(any(windows, target_os = "linux", test))]
         Artwork::Windows => include_str!("../icons/appicon-windows.svg"),
     };
     let [r, g, b] = appearance.accent;
@@ -47,7 +47,7 @@ pub(crate) fn render(artwork: Artwork, appearance: Appearance, size: u32) -> Res
     render_svg(&svg, size)
 }
 
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 pub(crate) fn render_tray(
     look: oink_agent::tray::TrayLook,
     appearance: Appearance,

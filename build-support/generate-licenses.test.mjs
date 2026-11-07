@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { npmPlatforms } from './license-platforms.mjs';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const native = JSON.parse(read('licenses/native-inventory.json'));
@@ -51,7 +52,7 @@ test('native menu SVGs are inventoried with their reviewed shape ownership', () 
     const expression = name === 'unlock.svg' ? 'GPL-3.0-only AND MIT' : library.has(name) ? 'MIT' : 'GPL-3.0-only';
     assert.equal(asset.licenseExpression, expression, name);
     assert.equal(asset.ownership, expression === 'GPL-3.0-only' ? 'first-party' : 'third-party', name);
-    assert.deepEqual(asset.platforms, ['windows-x64'], name);
+    assert.deepEqual(asset.platforms, ['windows-x64', 'linux-x64'], name);
     assert.deepEqual(asset.scope, ['runtime'], name);
     if (expression.includes('MIT')) {
       assert.ok(asset.licenseFiles.some(file => file.path === 'licenses/native/oink-ui-1.0.5-LICENSE.txt'), name);
@@ -67,10 +68,23 @@ test('bundled sponsor marks retain project provenance, terms and brand notices',
     assert.equal(asset.ownership, 'first-party', path);
     assert.equal(asset.licenseExpression, 'GPL-3.0-only', path);
     assert.equal(asset.selectedLicense, 'GPL-3.0-only', path);
-    assert.deepEqual(asset.platforms, ['macos-arm64', 'windows-x64'], path);
+    assert.deepEqual(asset.platforms, ['macos-arm64', 'windows-x64', 'linux-x64'], path);
     assert.deepEqual(asset.scope, ['runtime'], path);
     assert.deepEqual(asset.licenseFiles.map(file => file.path), ['LICENSE', 'LICENSE-ADDITIONAL-TERMS.md'], path);
     assert.match(asset.provenance, /Project-authored.*Mark/, path);
     assert.match(asset.trademarkNotice, /grants no trademark rights or endorsement/, path);
+  }
+});
+
+test('Linux-only npm binaries and negative os selectors use the actual Linux platform', () => {
+  assert.deepEqual(npmPlatforms({os:['linux'],cpu:['x64']}), ['linux-x64']);
+  assert.deepEqual(npmPlatforms({os:['win32'],cpu:['x64']}), ['windows-x64']);
+  assert.deepEqual(npmPlatforms({os:['!win32'],cpu:['x64']}), ['linux-x64']);
+  assert.deepEqual(npmPlatforms({os:['linux'],cpu:['arm64']}), []);
+  assert.deepEqual(npmPlatforms({}), ['macos-arm64','windows-x64','linux-x64']);
+});
+test('Linux Rust graph and shared native Opus are included in shipped attribution', () => {
+  for (const name of ['x11rb', 'unicode-normalization', 'gtk', 'Opus']) {
+    assert.ok(inventory.components.some(c => c.name === name && c.platforms.includes('linux-x64')), name);
   }
 });

@@ -65,7 +65,7 @@ struct Manifest {
 pub(crate) struct SponsorList(watch::Receiver<Option<Option<Vec<SponsorItem>>>>);
 
 impl SponsorList {
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
     pub(crate) fn start() -> Self {
         // Outer Option distinguishes pending from failure. Recreated windows share
         // the same startup request and in-memory result; nothing is saved to disk.
@@ -236,7 +236,7 @@ async fn load(client: &reqwest::Client, url: &str) -> Option<Vec<SponsorItem>> {
     (!resolved.is_empty()).then_some(resolved)
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 #[tauri::command]
 pub(crate) async fn shell_sponsor_list(state: tauri::State<'_, SponsorList>) -> Result<Option<Vec<SponsorItem>>, ()> {
     Ok(state.items().await)

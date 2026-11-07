@@ -26,6 +26,8 @@ mod remote;
 pub use progress::{Phase as TransferPhase, Progress as TransferProgress};
 pub mod grants;
 pub mod linked;
+#[cfg(target_os = "linux")]
+pub mod materialize;
 pub mod namespace;
 pub mod native_metadata;
 pub mod native_read;

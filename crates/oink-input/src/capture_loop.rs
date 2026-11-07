@@ -97,7 +97,7 @@ pub(crate) fn capture_available(available: bool) {
         }
     });
 }
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub(crate) fn capture_detached() {
     OWNER.with(|slot| {
         if let Some(owner) = slot.borrow_mut().as_mut() {
@@ -204,7 +204,7 @@ pub(crate) fn keyboard_pointer_modifiers() -> Vec<crate::KeyCode> {
     })
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn local_rewrite() -> Option<oink_foundation::input::LocalRewrite> {
     OWNER.with(|slot| slot.borrow().as_ref().and_then(|owner| owner.local_rewrite()))
 }

@@ -1,7 +1,7 @@
 //! Selected-device pull rendering and bounded, nonblocking diagnostics.
 //! The realtime callback performs no logging or diagnostic I/O.
 use crate::{OutputDevice, handoff, realtime};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 use std::sync::{
@@ -10,15 +10,17 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "linux")]
+use crate::linux::{NativeOutputTiming, NativePlayback};
 #[cfg(target_os = "macos")]
 use crate::macos_playback::{NativeOutputTiming, NativePlayback};
 #[cfg(windows)]
 use crate::windows_playback::{NativeOutputTiming, NativePlayback};
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 use unsupported::{NativeOutputTiming, NativePlayback};
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 mod unsupported {
     use super::Instant;
     #[derive(Clone, Copy)]
@@ -65,7 +67,11 @@ pub fn outputs() -> Result<Vec<OutputDevice>, String> {
     {
         crate::macos_devices::outputs()
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::outputs()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let host = cpal::default_host();
         let default = host
@@ -438,8 +444,12 @@ impl Playback {
             .ok_or("expected CoreAudio output device ID")?;
         #[cfg(windows)]
         let raw_id = id.strip_prefix("wasapi:").ok_or("expected WASAPI output device ID")?;
-        #[cfg(not(any(target_os = "macos", windows)))]
+        #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
         let raw_id = id;
+        #[cfg(target_os = "linux")]
+        let raw_id = id
+            .strip_prefix("pulse:")
+            .ok_or("expected PulseAudio output device ID")?;
 
         let (trace_tx, traces) = handoff::channel(8192, empty_trace());
         let error = Arc::new(Mutex::new(None));

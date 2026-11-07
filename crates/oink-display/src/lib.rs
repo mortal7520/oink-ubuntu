@@ -1,6 +1,6 @@
 //! 屏幕与布局。
 //!
-//! - [`DisplayBackend`]：枚举本机显示器、监听变化。平台实现在 `src/macos`、`src/windows`。
+//! - [`DisplayBackend`]：枚举本机显示器、监听变化。平台实现在 `src/macos`、`src/windows`、`src/linux`。
 //! - [`layout`]: native display groups expanded into a shared reference canvas.
 //!
 //! Native writes are explicit origin-only transactions gated by the agent's
@@ -13,6 +13,8 @@ pub use oink_foundation::display::DisplayInfo;
 pub mod arrangement;
 
 pub mod layout;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod projection;
@@ -64,6 +66,8 @@ pub trait DisplayBackend: Send + Sync {
 
 /// 创建本机平台的实现。
 pub fn platform_backend() -> Result<Box<dyn DisplayBackend>, DisplayError> {
+    #[cfg(target_os = "linux")]
+    return linux::backend();
     #[cfg(target_os = "macos")]
     return macos::backend();
     #[cfg(windows)]

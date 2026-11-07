@@ -124,6 +124,7 @@ pub const CAPABILITIES: &[&str] = &[
     "oink.focus.local-click/1",
     "oink.pointer.lock-escape/1",
     "oink.input.keymap-none/1",
+    "oink.input.linux-transform/1",
     "oink.pointer.entry-protection/1",
     "oink.power/1",
     "oink.cloud-file-links/1",

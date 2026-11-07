@@ -324,7 +324,12 @@ fn normalized_name(value: &str) -> String {
             value.into()
         }
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        use unicode_normalization::UnicodeNormalization;
+        value.nfc().collect()
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         value.into()
     }

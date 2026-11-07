@@ -109,6 +109,8 @@ export interface Member {
 
   facts_fresh: boolean;
   input_transform: InputTransform | null;
+  /** Absent on older owners; never infer this capability from defaulted transform data. */
+  linux_transform_supported?: boolean;
   keyboard_disabled: boolean | null;
   mouse_mode: "shared" | "local" | "disabled" | null;
   keyboard_mode: "shared" | "local" | "disabled" | null;
@@ -177,7 +179,8 @@ export interface SavedCustomKeymap { table: KeyMapping[]; caps_hold?: number | n
 export interface KeyboardMapping { preset: KeyPreset; table: KeyMapping[]; caps_tap_hold?: { tap: number; hold: number } | null; saved_custom?: SavedCustomKeymap | null }
 export interface TargetTransform { reverse_wheel: boolean; keyboard: KeyboardMapping }
 export interface InputLocalExclusion { scope: string; target: DeviceKey | null; mapping: KeyMapping; reason: string }
-export interface InputTransform { local_exclusions?: InputLocalExclusion[]; macos: TargetTransform; windows: TargetTransform; overrides: { target: DeviceKey; reverse_wheel: boolean | null; keyboard: KeyboardMapping | null }[] }
+export type InputTargetOs = "macos" | "windows" | "linux";
+export interface InputTransform { linux?: TargetTransform; local_exclusions?: InputLocalExclusion[]; macos: TargetTransform; windows: TargetTransform; overrides: { target: DeviceKey; reverse_wheel: boolean | null; keyboard: KeyboardMapping | null }[] }
 export interface ScrollSettings { speed: number }
 export type PointerReference = { type: "last_screen" } | { type: "fixed"; display: string };
 export type PointerScaling = "physical" | "proportional";
@@ -185,7 +188,7 @@ export interface PointerSettings { reference: PointerReference; scaling: Pointer
 export type HotkeyAction = "lock_remote_windows" | "toggle_microphone_mute" | "lock_escape" | "lock_focus" | "return_pointer_home" | "toggle_sharing" | "open_window" | "toggle_game_mode" | "pause_all" | "move_pointer_to";
 export interface Hotkey { action: HotkeyAction; device?: DeviceKey; keys: string[]; enabled: boolean }
 export type EventFrequency = "hz125" | "unlimited";
-export interface KeySupport { macos: number[]; windows: number[] }
+export interface KeySupport { macos: number[]; windows: number[]; linux?: number[] }
 export interface InputSettings {
   /** Read-only recovery chord provided by the router. */
   keyboard_release_keys: string[];

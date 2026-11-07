@@ -1,5 +1,6 @@
 # build outputs
 target/
+dist-linux/
 node_modules/
 dist/
 .release-tools/

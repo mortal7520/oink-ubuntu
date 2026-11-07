@@ -85,6 +85,8 @@ pub fn generation() -> u64 {
     {
         #[cfg(windows)]
         windows::start();
+        #[cfg(target_os = "linux")]
+        crate::linux::start_inventory_notifications();
         GENERATION.load(Ordering::Acquire)
     }
 }
@@ -118,6 +120,8 @@ type Callback = std::sync::Arc<dyn Fn() + Send + Sync>;
 type Listeners = oink_foundation::snapshot::Snapshot<Vec<std::sync::Weak<dyn Fn() + Send + Sync>>>;
 static LISTENERS: std::sync::OnceLock<Listeners> = std::sync::OnceLock::new();
 pub fn subscribe(wake: Callback) -> Callback {
+    #[cfg(target_os = "linux")]
+    crate::linux::start_inventory_notifications();
     static REGISTER: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _guard = REGISTER.lock().unwrap_or_else(|e| e.into_inner());
     let listeners = LISTENERS.get_or_init(Default::default);

@@ -67,6 +67,8 @@ async fn scenario() {
         },
         platform: if cfg!(target_os = "macos") {
             ClipPlatform::Mac
+        } else if cfg!(target_os = "linux") {
+            ClipPlatform::Unknown
         } else {
             ClipPlatform::Windows
         },
@@ -78,13 +80,17 @@ async fn scenario() {
                 id: RepresentationId(1),
                 format: if cfg!(target_os = "macos") {
                     NativeFormat::Mac("example.test.raw".into())
+                } else if cfg!(target_os = "linux") {
+                    // X11 reconstructs the negotiated MIME byte contract, not
+                    // opaque Windows registered formats.
+                    NativeFormat::Unknown("mime:application/rtf".into())
                 } else {
                     NativeFormat::WindowsRegistered("Oink Test Raw".into())
                 },
                 medium: Medium::Bytes,
                 aspect: 1,
                 index: -1,
-                standard: None,
+                standard: cfg!(target_os = "linux").then_some(StandardFormat::Rtf),
                 data: RepresentationData::Reader {
                     size: ContentSize::Known(bytes.len() as u64),
                 },

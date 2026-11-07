@@ -269,7 +269,7 @@ impl Runtime {
         // Windows endpoint discovery completes asynchronously in the same cache
         // used by Settings. Observe it on every control tick, including completion
         // after a device revision, without another OS enumeration.
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         self.update_output(owner, crate::microphone_plugin::virtual_output());
         if owner.paused || owner.power_state.sleeping || owner.update_suspended {
             self.stop(owner);

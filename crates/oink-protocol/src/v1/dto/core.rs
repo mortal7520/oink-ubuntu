@@ -225,6 +225,7 @@ wire_map!(InputTransformValue, no_validation, {
     1 => macos: TargetTransform = required;
     2 => windows: TargetTransform = required;
     3 => overrides: List<TargetOverride,16> = required;
+    4 => linux: Option<TargetTransform> = optional;
 });
 
 wire_map!(Digest, validate_digest, {
@@ -501,4 +502,58 @@ fn validate_digest(raw: &RawMap) -> Result<()> {
         return Err(ErrorCode::MalformedFrame.into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod linux_transform_compat_tests {
+    use super::*;
+    use crate::v1::{
+        RawMap, RawValue,
+        schema::{WireDto, WireValue},
+    };
+    // Frozen 0.3.3 shape: old peers know only these three keys and retain the rest.
+    wire_map!(LegacyInputTransformValue,no_validation,{
+     1=>macos:TargetTransform=required;
+     2=>windows:TargetTransform=required;
+     3=>overrides:List<TargetOverride,16>=required;
+    });
+    fn target() -> RawValue {
+        RawValue::Map(
+            [
+                (1, false.write()),
+                (
+                    2,
+                    RawValue::Map(
+                        [
+                            (1, super::super::KeyPreset::None.write()),
+                            (2, RawValue::Array(Vec::new())),
+                        ]
+                        .into(),
+                    ),
+                ),
+            ]
+            .into(),
+        )
+    }
+    #[test]
+    fn legacy_shape_accepts_and_retains_linux_without_requiring_it() {
+        let old: RawMap = [(1, target()), (2, target()), (3, RawValue::Array(Vec::new()))].into();
+        assert_eq!(
+            InputTransformValue::from_raw(old.clone()).unwrap().linux().unwrap(),
+            None
+        );
+        let mut new = old.clone();
+        new.insert(4, target());
+        new.insert(900, RawValue::Text("future".into()));
+        let legacy = LegacyInputTransformValue::from_raw(new.clone()).unwrap();
+        assert_eq!(legacy.raw(), &new);
+        assert!(legacy.macos().is_ok() && legacy.windows().is_ok() && legacy.overrides().is_ok());
+        assert!(
+            InputTransformValue::from_raw(legacy.into_raw())
+                .unwrap()
+                .linux()
+                .unwrap()
+                .is_some()
+        );
+    }
 }

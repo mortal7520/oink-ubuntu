@@ -9,8 +9,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export function auditPackage(packageRoot,platform,root = resolve(dirname(fileURLToPath(import.meta.url)),'..')) {
   const inventory=JSON.parse(readFileSync(join(root,'third-party-licenses.json'),'utf8'));
   const native=JSON.parse(readFileSync(join(root,'licenses/native-inventory.json'),'utf8'));
-  if (!['macos-arm64','windows-x64'].includes(platform)) throw Error('--platform must be macos-arm64 or windows-x64');
-  const attributionRoot=platform==='macos-arm64' ? join(packageRoot,'Contents/Resources') : packageRoot;
+  if (!['macos-arm64','windows-x64','linux-x64'].includes(platform)) throw Error('--platform must be macos-arm64, windows-x64 or linux-x64');
+  const attributionRoot=platform==='macos-arm64' ? join(packageRoot,'Contents/Resources') : platform==='linux-x64' ? join(packageRoot,'resources') : packageRoot;
   for (const path of ['third-party-licenses.json','THIRD_PARTY_LICENSES.md','NOTICE','LICENSE','LICENSE-ADDITIONAL-TERMS.md', ...new Set(inventory.components.flatMap(c=>c.licenseFiles.map(f=>f.path)))]) {
     const actual=join(attributionRoot,path);
     if (!existsSync(actual) || !readFileSync(actual).equals(readFileSync(join(root,path)))) throw Error(`Package attribution missing/different: ${path}`);
@@ -32,7 +32,7 @@ export function auditPackage(packageRoot,platform,root = resolve(dirname(fileURL
 }
 
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
-  if (process.argv.length!==4) throw Error('Usage: node build-support/check-package-licenses.mjs <unpacked-root> <macos-arm64|windows-x64>');
+  if (process.argv.length!==4) throw Error('Usage: node build-support/check-package-licenses.mjs <unpacked-root> <macos-arm64|windows-x64|linux-x64>');
   auditPackage(resolve(process.argv[2]),process.argv[3]);
   console.log('Package attribution and standalone native assets verified.');
 }

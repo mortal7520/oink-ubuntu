@@ -9,6 +9,9 @@ use oink_foundation::Rect;
 
 use crate::raster::{Canvas, Color, over};
 mod annotation;
+#[cfg(target_os = "linux")]
+#[path = "linux.rs"]
+mod platform;
 use crate::text::{self, Pen, TextRaster};
 use annotation::raster;
 

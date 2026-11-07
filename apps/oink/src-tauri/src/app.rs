@@ -281,6 +281,12 @@ pub fn run() {
                 return;
             }
         }
+        #[cfg(target_os = "linux")]
+        if let Err(error) = crate::service::start_once_linux(&remote) {
+            tracing::error!(%error, "Ubuntu backend startup failed");
+            eprintln!("Ubuntu backend startup failed: {error}");
+            return;
+        }
         #[cfg(not(windows))]
         {
             if let Err(error) = crate::service::check_backend_ownership(&data_dir) {
@@ -401,6 +407,8 @@ pub fn run() {
                 crate::foreground_windows::install(&handle);
                 setup_tray(&handle)?;
             }
+            #[cfg(target_os = "linux")]
+            setup_tray_linux(&handle)?;
             forward_events(&handle);
             crate::native_controls::initialize(&handle);
             #[cfg(windows)]
@@ -603,6 +611,22 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .build(app)?;
     crate::tray_windows::install(app)?;
     crate::app_icon::tray_created(app);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn setup_tray_linux(app: &AppHandle) -> tauri::Result<()> {
+    let icon =
+        crate::app_icon::tray_image_linux(app).map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
+    let menu = tauri::menu::Menu::new(app)?;
+    // AppIndicator requires an attached menu on GNOME. Its actions are updated
+    // from the same authoritative device model as the other native shells.
+    tauri::tray::TrayIconBuilder::with_id("main")
+        .icon(icon)
+        .tooltip("Oink Ubuntu (modified)")
+        .menu(&menu)
+        .build(app)?;
+    crate::native_controls::initialize(app);
     Ok(())
 }
 

@@ -90,14 +90,14 @@ impl Fingerprint {
             created: metadata.created().ok(),
             directory: metadata.is_dir(),
             exec_bits: {
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 {
                     use std::os::unix::fs::PermissionsExt;
                     metadata
                         .is_file()
                         .then(|| (metadata.permissions().mode() & 0o111) as u16)
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(any(target_os = "macos", target_os = "linux")))]
                 {
                     None
                 }
@@ -657,7 +657,7 @@ mod tests;
 /// Only the link itself is inspected; no canonicalize/stat/open of its target.
 /// Windows does not publish reparse leaves; batch capture binds followed targets.
 pub(in crate::content) fn inspect_leaf(path: &Path) -> io::Result<Fingerprint> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let metadata = fs::symlink_metadata(path)?;
         if metadata.file_type().is_symlink() {

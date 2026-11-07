@@ -72,7 +72,7 @@ impl TextRaster for StrokeText {
 
 /// 本机平台的系统文字；平台没有实现或字体创建失败时是 [`StrokeText`]。
 pub fn system() -> Box<dyn TextRaster> {
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
     if let Some(t) = platform::SystemText::new() {
         return Box::new(t);
     }
@@ -81,7 +81,7 @@ pub fn system() -> Box<dyn TextRaster> {
 
 /// System UI text at the Toast's title (600) and description (450) weights.
 pub fn system_toast() -> Box<dyn TextRaster> {
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
     if let Some(t) = platform::SystemText::toast() {
         return Box::new(t);
     }
@@ -90,7 +90,7 @@ pub fn system_toast() -> Box<dyn TextRaster> {
 
 /// System UI text at medium (500) weight, matching dimension annotation labels.
 pub fn system_medium() -> Box<dyn TextRaster> {
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
     if let Some(t) = platform::SystemText::medium() {
         return Box::new(t);
     }
@@ -103,6 +103,10 @@ mod platform;
 
 #[cfg(windows)]
 #[path = "text_windows.rs"]
+mod platform;
+
+#[cfg(target_os = "linux")]
+#[path = "text_linux.rs"]
 mod platform;
 
 fn blit(c: &mut Canvas, m: &Mask, x: f64, y_cap_top: f64, color: Color) {
@@ -234,7 +238,7 @@ mod tests {
     }
 
     /// 系统文字：中文要真的画出来（不是空白），字号按 cap 高缩放。只在有系统实现的平台上检查。
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
     #[test]
     fn system_text_renders_chinese_at_the_requested_size() {
         let font = system();

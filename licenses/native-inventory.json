@@ -88,7 +88,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "cargoPackage": {
         "name": "opusic-sys",
@@ -265,7 +266,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -300,7 +302,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -335,7 +338,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -438,7 +442,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -710,7 +715,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -745,7 +751,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2481,7 +2488,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2513,7 +2521,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2548,7 +2557,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2583,7 +2593,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2618,7 +2629,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2653,7 +2665,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2687,7 +2700,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2722,7 +2736,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2757,7 +2772,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2792,7 +2808,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2826,7 +2843,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2860,7 +2878,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2894,7 +2913,8 @@
         "runtime"
       ],
       "platforms": [
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2937,7 +2957,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {
@@ -2974,7 +2995,8 @@
       ],
       "platforms": [
         "macos-arm64",
-        "windows-x64"
+        "windows-x64",
+        "linux-x64"
       ],
       "licenseFiles": [
         {

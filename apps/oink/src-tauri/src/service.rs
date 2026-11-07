@@ -3,7 +3,7 @@
 use oink_agent::ipc::ServiceInfo;
 use oink_agent::remote::{EventsEnd, RemoteApi};
 use std::path::Path;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use std::process::Command;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
@@ -48,7 +48,7 @@ const START_TIMEOUT: Duration = Duration::from_secs(30);
 pub fn dispatch_args() -> Option<ExitCode> {
     let arg = std::env::args().nth(1)?;
     match arg.as_str() {
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         oink_agent::backend::REOPEN_FLAG => {
             let result = wait_previous_pair(&oink_foundation::paths::data_dir()).and_then(|()| {
                 let exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -230,5 +230,49 @@ mod startup_wait_tests {
         startup.finish(Err("launch denied".into()));
         assert_eq!(startup.wait().await, Err("launch denied".into()));
         assert!(!startup.ready());
+    }
+}
+
+/// A user-session backend owns X11 input. No root service or global input permissions.
+#[cfg(target_os = "linux")]
+pub fn start_once_linux(api: &RemoteApi) -> Result<(), String> {
+    let mut child = match oink_agent::instance::is_running(api.data_dir()) {
+        Some(true) => None,
+        Some(false) => {
+            let exe = std::env::current_exe()
+                .map_err(|e| e.to_string())?
+                .with_file_name("oink-backend");
+            if !exe.is_file() {
+                return Err("Ubuntu backend is missing beside the application executable".into());
+            }
+            Some(
+                oink_agent::backend::launch::spawn_detached(
+                    std::process::Command::new(exe).env("OINK_HOME", api.data_dir()),
+                )
+                .map_err(|e| e.to_string())?,
+            )
+        }
+        None => return Err("backend_ownership_unavailable".into()),
+    };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        if let Some(child) = &mut child {
+            if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+                return Err(format!("Ubuntu backend exited: {status}"));
+            }
+        }
+        if oink_agent::instance::is_running(api.data_dir()) == Some(true) {
+            api.reset_connections();
+            if api.hello_with_timeout(Duration::from_millis(200)).is_ok() {
+                return Ok(());
+            }
+            if api.build_mismatch() {
+                return Err("backend build mismatch".into());
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err("Ubuntu backend start timed out; see the local logs".into());
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
 }

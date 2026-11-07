@@ -270,7 +270,8 @@ unit!(oink_clipboard::provider_preparation::PlaceholderFallback=>w::DiagPlacehol
 unit!(super::ProviderDragPath=>w::DiagProviderDragPath{Provider=>Provider,DegradedPromise=>DegradedPromise,Failed=>Failed});
 unit!(oink_foundation::dnd::NativeHoldEnd=>w::DiagNativeHoldEnd{Resume=>Resume,DraggingExited=>DraggingExited,DraggingEnded=>DraggingEnded,DropAccepted=>DropAccepted,DropRejected=>DropRejected,CancelRepositioned=>CancelRepositioned,HoldRejected=>HoldRejected,HoldUnconfirmed=>HoldUnconfirmed});
 unit!(oink_foundation::dnd::ImageNudgeReason=>w::DiagImageNudgeReason{InitialHide=>InitialHide,ImageUpdate=>ImageUpdate});
-unit!(oink_routing::Os=>w::DiagOs{MacOS=>MacOS,Windows=>Windows,Other=>Other});
+// Keep the released diagnostic enum wire-compatible; runtime Linux remains explicit.
+unit!(oink_routing::Os=>w::DiagOs{MacOS=>MacOS,Windows=>Windows,Linux=>Other,Other=>Other});
 unit!(oink_routing::router::SourceInput=>w::DiagSourceInput{Motion=>Motion,RawMotion=>RawMotion,Button=>Button,Keyboard=>Keyboard,Scroll=>Scroll,Gesture=>Gesture,Contacts=>Contacts});
 unit!(oink_routing::router::SourceDestination=>w::DiagSourceDestination{Local=>Local,Forwarded=>Forwarded,Consumed=>Consumed});
 structure!(oink_input::warp_delta::DeltaSnapshot=>w::DiagDeltaSnapshot{hid_location,fold,warp,drop_next});
